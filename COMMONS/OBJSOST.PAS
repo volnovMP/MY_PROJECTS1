@@ -286,6 +286,7 @@ fix := 96;
     // нарисовать кнопку конца набора
     //
     //********************************
+{
 fix := 97;
       if WorkMode.MarhUpr and WorkMode.Upravlenie and WorkMode.GoTracert then
       begin
@@ -297,6 +298,7 @@ fix := 97;
       form.Rectangle(obj.Points[1].X,obj.Points[1].Y+0, obj.Points[1].X+100,obj.Points[1].Y+17);
       form.Font.Style := []; form.Font.Size := 8;
       form.TextOut(obj.Points[1].X+13,obj.Points[1].Y+2, 'Конец набора');
+      }
     end;
 
 
@@ -346,6 +348,7 @@ fix := 102;
     // нарисовать кнопку подсветки положения стрелок
     //
     //***********************************************
+{
 fix := 101;
       if WorkMode.Podsvet then
       begin
@@ -357,8 +360,8 @@ fix := 101;
       form.Rectangle(obj.Points[1].X,obj.Points[1].Y+0, obj.Points[1].X+100,obj.Points[1].Y+17);
       form.Font.Style := []; form.Font.Size := 8;
       form.TextOut(obj.Points[1].X+1,obj.Points[1].Y+2, 'Подсветка стрелок');
+ }
     end;
-
 
     104 : begin
     //******************************************
@@ -542,22 +545,37 @@ fix := 100;
     //
     //**********************************************************************
 fix := 98;
-
-       form.Pen.Color := 0; form.Pen.Style := psSolid;  form.Pen.Width := 1; form.Brush.Style := bsSolid; form.Font.Color := clBlack;
-       form.Brush.Color := armcolor16; form.Font.Size := 8;
-       form.Rectangle(obj.Points[1].X,obj.Points[1].Y,obj.Points[1].X+176,obj.Points[1].Y+37);
+       //установить параметры рисования
+       form.Pen.Color := 0;
+       form.Pen.Style := psSolid;
+       form.Pen.Width := 1;
+       form.Brush.Style := bsSolid;
+       form.Font.Color := clBlack;
+       form.Brush.Color := armcolor16;
+       form.Font.Size := 8;
+       form.Rectangle(obj.Points[1].X,obj.Points[1].Y,obj.Points[1].X+189,obj.Points[1].Y+37);
 
        // состояние оборудования верхнего уровня
-       if StateRU > 0 then begin if (StateRU and $8) = $8 then form.Brush.Color := armcolor2 else form.Brush.Color := armcolor7; end else form.Brush.Color := armcolor1;
+       if StateRU > 0 then
+       begin
+        if (StateRU and $8) = $8 then form.Brush.Color := armcolor2
+        else form.Brush.Color := armcolor7;
+       end
+       else form.Brush.Color := armcolor1;
+
        form.Rectangle(obj.Points[1].X+2,obj.Points[1].Y+10,obj.Points[1].X+27,obj.Points[1].Y+27);
        form.Font.Size := 8; form.Font.Style := []; form.Brush.Style := bsClear;
 
-       if (StateRU = 0) or WorkMode.NU[0] or WorkMode.BU[0] or not WorkMode.KRU[0] or (WorkMode.OU[0] and WorkMode.RU[0]) then sLbl := 'Н' else
+       if (StateRU = 0) or WorkMode.NU[0] or WorkMode.BU[0] or not WorkMode.KRU[0] or (WorkMode.OU[0] and WorkMode.RU[0]) then
+        sLbl := 'Н'
+       else
        if ((StateRU and $40) = $40) and (WorkMode.OU[0]) then
        begin
          if WorkMode.Upravlenie then sLbl := 'Упр' else sLbl := 'Рез';
        end else
-       if WorkMode.RU[0] then sLbl := 'АУ' else sLbl := 'Н';
+       if WorkMode.RU[0] then sLbl := 'АУ'
+       else sLbl := 'Н';
+
        form.TextOut(obj.Points[1].X+4,obj.Points[1].Y+12,sLbl);
 
        // состояние оборудования серверов
@@ -572,19 +590,58 @@ fix := 98;
        form.TextOut(obj.Points[1].X+33,obj.Points[1].Y+12,sLbl);
 
        // состояние оборудования нижнего уровня
-       n := OVBuffer[Obj.ObjConstI[1]].Param[1]; p := not OVBuffer[Obj.ObjConstI[1]].Param[16];
-       b1 := OVBuffer[Obj.ObjConstI[1]].Param[2];
-       b2 := OVBuffer[Obj.ObjConstI[1]].Param[3];
-       b3 := OVBuffer[Obj.ObjConstI[1]].Param[4];
+       n := OVBuffer[Obj.ObjConstI[1]].Param[1];  //основной / резервный
+       p := not OVBuffer[Obj.ObjConstI[1]].Param[16];
+       b1 := OVBuffer[Obj.ObjConstI[1]].Param[2]; //Ао - исправность основного
+       b2 := OVBuffer[Obj.ObjConstI[1]].Param[3]; //Ар - исправность резервного
+       b3 := OVBuffer[Obj.ObjConstI[1]].Param[4]; // МИФ
        form.Brush.Style := bsSolid; form.Pen.Color := clBlack; form.Pen.Width := 1;
-       if p then form.Brush.Color := armcolor8 else if n then form.Brush.Color := armcolor14 else if not b2 and not b3 then form.Brush.Color := armcolor2 else if b2 and b3 then form.Brush.Color := armcolor1 else form.Brush.Color := armcolor7;
+       if p then form.Brush.Color := armcolor8 //если .........
+       else
+          if n then form.Brush.Color := armcolor14 //основной
+          else
+            if not b2 and not b3
+              then form.Brush.Color := armcolor2
+                else
+                  if b2 and b3
+                    then form.Brush.Color := armcolor1
+                  else form.Brush.Color := armcolor7;
        form.Rectangle(obj.Points[1].X+70,obj.Points[1].Y+10,obj.Points[1].X+82,obj.Points[1].Y+27);
-       if not p and not n and OVBuffer[Obj.ObjConstI[1]].Param[6] then begin form.Pen.Color := armcolor1; form.Pen.Width := 3; form.MoveTo(obj.Points[1].X+70+2,obj.Points[1].Y+11); form.LineTo(obj.Points[1].X+70+2,obj.Points[1].Y+25) end;
-       if not p and not n and OVBuffer[Obj.ObjConstI[1]].Param[7] then begin form.Pen.Color := armcolor1; form.Pen.Width := 3; form.MoveTo(obj.Points[1].X+82-3,obj.Points[1].Y+11); form.LineTo(obj.Points[1].X+82-3,obj.Points[1].Y+25) end;
-       if tab_page and OVBuffer[Obj.ObjConstI[1]].Param[9] then form.Font.Color := armcolor1 else form.Font.Color := clBlack; form.Font.Size := 8; form.Font.Style := []; form.Brush.Style := bsClear;
-       if n or p or (b2 and b3) then sLbl := 'Н' else begin if b1 then sLbl := 'П' else sLbl := 'л'; end; form.TextOut(obj.Points[1].X+72,obj.Points[1].Y+12, sLbl);
 
-       n := OVBuffer[Obj.ObjConstI[2]].Param[1]; p := not OVBuffer[Obj.ObjConstI[2]].Param[16];
+       if not p and not n and OVBuffer[Obj.ObjConstI[1]].Param[6]
+       then
+        begin
+          form.Pen.Color := armcolor1; form.Pen.Width := 3;
+          form.MoveTo(obj.Points[1].X+70+2,obj.Points[1].Y+11);
+          form.LineTo(obj.Points[1].X+70+2,obj.Points[1].Y+25)
+        end;
+
+       if not p and not n and OVBuffer[Obj.ObjConstI[1]].Param[7]
+       then
+        begin
+          form.Pen.Color := armcolor1;
+          form.Pen.Width := 3;
+          form.MoveTo(obj.Points[1].X+82-3,obj.Points[1].Y+11);
+          form.LineTo(obj.Points[1].X+82-3,obj.Points[1].Y+25)
+        end;
+
+       if tab_page and OVBuffer[Obj.ObjConstI[1]].Param[9] then form.Font.Color := armcolor1
+       else form.Font.Color := clBlack;
+
+       form.Font.Size := 8;
+       form.Font.Style := [];
+       form.Brush.Style := bsClear;
+
+       if n or p or (b2 and b3) then sLbl := 'Н'
+       else
+        begin
+          if b1 then sLbl := 'П'
+          else sLbl := 'л';
+        end;
+        form.TextOut(obj.Points[1].X+72,obj.Points[1].Y+12, sLbl);
+
+       n := OVBuffer[Obj.ObjConstI[2]].Param[1];
+       p := not OVBuffer[Obj.ObjConstI[2]].Param[16];
        b1 := OVBuffer[Obj.ObjConstI[2]].Param[2];
        b2 := OVBuffer[Obj.ObjConstI[2]].Param[3];
        b3 := OVBuffer[Obj.ObjConstI[2]].Param[4];
@@ -667,6 +724,18 @@ fix := 98;
        if not p and not n and OVBuffer[Obj.ObjConstI[8]].Param[7] then begin form.Pen.Color := armcolor1; form.Pen.Width := 3; form.MoveTo(obj.Points[1].X+173-3,obj.Points[1].Y+11); form.LineTo(obj.Points[1].X+173-3,obj.Points[1].Y+25) end;
        if tab_page and OVBuffer[Obj.ObjConstI[8]].Param[9] then form.Font.Color := armcolor1 else form.Font.Color := clBlack; form.Font.Size := 8; form.Font.Style := []; form.Brush.Style := bsClear;
        if n or p or (b2 and b3) then sLbl := 'Н' else begin if b1 then sLbl := 'П' else sLbl := 'л'; end; form.TextOut(obj.Points[1].X+163,obj.Points[1].Y+12, sLbl);
+
+       n := OVBuffer[Obj.ObjConstI[9]].Param[1]; p := not OVBuffer[Obj.ObjConstI[9]].Param[16];
+       b1 := OVBuffer[Obj.ObjConstI[9]].Param[2];
+       b2 := OVBuffer[Obj.ObjConstI[9]].Param[3];
+       b3 := OVBuffer[Obj.ObjConstI[9]].Param[4];
+       form.Brush.Style := bsSolid; form.Pen.Color := clBlack; form.Pen.Width := 1;
+       if p then form.Brush.Color := armcolor8 else if n then form.Brush.Color := armcolor14 else if not b2 and not b3 then form.Brush.Color := armcolor2 else if b2 and b3 then form.Brush.Color := armcolor1 else form.Brush.Color := armcolor7;
+       form.Rectangle(obj.Points[1].X+174,obj.Points[1].Y+10,obj.Points[1].X+186,obj.Points[1].Y+27);
+       if not p and not n and OVBuffer[Obj.ObjConstI[8]].Param[6] then begin form.Pen.Color := armcolor1; form.Pen.Width := 3; form.MoveTo(obj.Points[1].X+174+2,obj.Points[1].Y+11); form.LineTo(obj.Points[1].X+174+2,obj.Points[1].Y+25) end;
+       if not p and not n and OVBuffer[Obj.ObjConstI[8]].Param[7] then begin form.Pen.Color := armcolor1; form.Pen.Width := 3; form.MoveTo(obj.Points[1].X+186-3,obj.Points[1].Y+11); form.LineTo(obj.Points[1].X+186-3,obj.Points[1].Y+25) end;
+       if tab_page and OVBuffer[Obj.ObjConstI[8]].Param[9] then form.Font.Color := armcolor1 else form.Font.Color := clBlack; form.Font.Size := 8; form.Font.Style := []; form.Brush.Style := bsClear;
+       if n or p or (b2 and b3) then sLbl := 'Н' else begin if b1 then sLbl := 'П' else sLbl := 'л'; end; form.TextOut(obj.Points[1].X+176,obj.Points[1].Y+12, sLbl);
 
        form.Pen.Width := 5;
        // Состояние канала1 связи АРМ - Сервера
@@ -3202,7 +3271,9 @@ fix := 53;
     //
     //**************************
 fix := 54;
-      form.Pen.Style := psSolid; form.Brush.Style := bsSolid;
+      form.Pen.Style := psSolid;
+      form.Brush.Style := bsSolid;
+      form.Brush.Color := armcolor15;
       if not OVBuffer[Obj.ObjConstI[1]].Param[16] then
       begin // отсутствие информации
         form.Brush.Color := armcolor8; form.Pen.Color := 0; form.Pen.Width := 1; form.Font.Color := clBlack;
@@ -3213,12 +3284,16 @@ fix := 54;
       end else
       if OVBuffer[Obj.ObjConstI[1]].Param[Obj.ObjConstI[2]] then
       begin // Лампа включена
-        form.Brush.Color := GetColor(Obj.ObjConstI[5]); form.Pen.Color := GetColor(Obj.ObjConstI[6]);
-        form.Pen.Width := 1; form.Font.Color := GetColor(Obj.ObjConstI[6]);
+        form.Brush.Color := GetColor(Obj.ObjConstI[5]);
+        form.Pen.Color := GetColor(Obj.ObjConstI[6]);
+        form.Pen.Width := 1;
+        form.Font.Color := GetColor(Obj.ObjConstI[6]);
       end else
       begin // Лампа выключена
-        form.Brush.Color := GetColor(Obj.ObjConstI[3]); form.Pen.Color := GetColor(Obj.ObjConstI[4]);
-        form.Pen.Width := 1; form.Font.Color := GetColor(Obj.ObjConstI[4]);
+        form.Brush.Color := GetColor(Obj.ObjConstI[3]);
+        form.Pen.Color := GetColor(Obj.ObjConstI[4]);
+        form.Pen.Width := 1;
+        form.Font.Color := GetColor(Obj.ObjConstI[4]);
       end;
       case Obj.ObjConstI[7] of
         1: form.Polygon([Point(obj.Points[1].X-20,obj.Points[1].Y-6), Point(obj.Points[1].X+20,obj.Points[1].Y-6), Point(obj.Points[1].X+26,obj.Points[1].Y), Point(obj.Points[1].X+20,obj.Points[1].Y+6), Point(obj.Points[1].X-20,obj.Points[1].Y+6)]);
@@ -3276,13 +3351,19 @@ fix := 54;
     //**************************
 fix := 55;
       form.Pen.Style := psSolid; form.Brush.Style := bsSolid;
-      if not OVBuffer[Obj.ObjConstI[1]].Param[16] then
+       if not OVBuffer[Obj.ObjConstI[1]].Param[16] then
       begin // отсутствие информации
-        form.Brush.Color := armcolor8; form.Pen.Color := 0; form.Pen.Width := 1; form.Font.Color := clBlack;
+        form.Brush.Color := armcolor8;
+        form.Pen.Color := 0;
+        form.Pen.Width := 1;
+        form.Font.Color := clBlack;
       end else
       if OVBuffer[Obj.ObjConstI[1]].Param[1] then
       begin // непарафазность датчиков
-        form.Brush.Color := armcolor14; form.Pen.Color := 0; form.Pen.Width := 1; form.Font.Color := clBlack;
+        form.Brush.Color := armcolor14;
+        form.Pen.Color := 0;
+        form.Pen.Width := 1;
+        form.Font.Color := clBlack;
       end else
       begin
         x1 := 0;
@@ -3297,17 +3378,23 @@ fix := 55;
         end;
         if x1 > 0 then
         begin
-          form.Pen.Color := GetColor(Obj.ObjConstI[6]); form.Pen.Width := 1; form.Font.Color := GetColor(Obj.ObjConstI[6]);
+          form.Pen.Color := GetColor(Obj.ObjConstI[6]);
+          form.Pen.Width := 1;
+          form.Font.Color := GetColor(Obj.ObjConstI[6]);
         end else
         begin
-          form.Pen.Color := GetColor(Obj.ObjConstI[4]); form.Pen.Width := 1; form.Font.Color := GetColor(Obj.ObjConstI[4]);
+          form.Pen.Color := GetColor(Obj.ObjConstI[4]);
+          form.Pen.Width := 1;
+          form.Font.Color := GetColor(Obj.ObjConstI[4]);
         end;
       end;
       case Obj.ObjConstI[10] of
         1: form.Polygon([Point(obj.Points[1].X-20,obj.Points[1].Y-6), Point(obj.Points[1].X+20,obj.Points[1].Y-6), Point(obj.Points[1].X+26,obj.Points[1].Y), Point(obj.Points[1].X+20,obj.Points[1].Y+6), Point(obj.Points[1].X-20,obj.Points[1].Y+6)]);
         2: form.Polygon([Point(obj.Points[1].X+20,obj.Points[1].Y-6), Point(obj.Points[1].X-20,obj.Points[1].Y-6), Point(obj.Points[1].X-26,obj.Points[1].Y), Point(obj.Points[1].X-20,obj.Points[1].Y+6), Point(obj.Points[1].X+20,obj.Points[1].Y+6)]);
         3: begin // Кнопка
-          form.Pen.Width := 1; form.Pen.Style := psSolid; form.Pen.Color := form.Brush.Color;
+          form.Pen.Width := 1;
+          form.Pen.Style := psSolid;
+          form.Pen.Color := form.Brush.Color;
           form.Rectangle(obj.Points[1].X-19,obj.Points[1].Y-5,obj.Points[1].X+19,obj.Points[1].Y+6);
           form.Pen.Color := armcolor16;
           form.MoveTo(obj.Points[1].X+19,obj.Points[1].Y-6);

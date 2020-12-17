@@ -16,13 +16,13 @@
 \*************************************************************/
 void MAKE_KOMANDA(int ARM,int STAT,int ray)
 {
-  unsigned int obj,obj_serv,ii,tst_sum,tip_ob,ob_ob;
-  unsigned char komanda;
+	unsigned int obj,obj_serv,ii,tst_sum,tip_ob,ob_ob;
+	unsigned char komanda;
   if(KOMANDA_RAZD[ARM][STAT][0]!=0)//если есть первая раздельная
 	{ //выделение номера объекта АРМа
 		obj=KOMANDA_RAZD[ARM][STAT][1]+KOMANDA_RAZD[ARM][STAT][2]*256;
 
-		if((obj==0)||(obj>=KOL_VO))
+		if((obj<=0)||(obj>=KOL_VO))
 		{
 			for(ii=0;ii<3;ii++)KOMANDA_RAZD[ARM][STAT][ii]=0;
 			return;
@@ -33,14 +33,14 @@ void MAKE_KOMANDA(int ARM,int STAT,int ray)
 		//-----------------------------------------------------------------
     if(obj==999)
     {
-      if((komanda==79)&&(PROCESS==0x40))//если автозапрос управления
+			if((komanda==79)&&(PROCESS==0x40))//если автозапрос управления
       {
          //если автозапрос от АРМа предустановки первого района
         if((ARM+4)==SOST_RANJ[0])
         { //освободить данный АРМ от всех районов
           for(ii=0;ii<Nranj;ii++)KONFIG_ARM[ARM][ii]=0;
           //проверить свободность данного района от управления
-          tst_sum=0;
+					tst_sum=0;
           for(ii=0;ii<Narm;ii++)tst_sum=tst_sum+KONFIG_ARM[ii][0];
           if(tst_sum<0xff)//если район не управляется никем
           {
@@ -68,7 +68,7 @@ void MAKE_KOMANDA(int ARM,int STAT,int ray)
 					}
           else
           {
-            KVIT_ARMu[ARM][STAT][2]=0x6;
+						KVIT_ARMu[ARM][STAT][2]=0x6;
             KONFIG_ARM[ARM][1]=0x2;
           }
         }
@@ -121,13 +121,14 @@ void MAKE_KOMANDA(int ARM,int STAT,int ray)
 		//находим соответствующий объект сервера 
 
 		obj_serv=inp_ob[obj];
-		if(obj_serv>KOL_VO)return;
+		if(obj_serv>=KOL_VO)return;
+		if(obj_serv<0)return;
 		READ_BD(obj_serv); 											//читаем объект сервера 
 		if(bd_osn[0]<100)tip_ob=bd_osn[0]&0xF; //выделяем тип объекта 
 		else tip_ob=bd_osn[0];
-		if(((tip_ob>=1)&&(tip_ob<=5))||(tip_ob==8)||(tip_ob==9))
+		if(((tip_ob>=1)&&(tip_ob<=5))||((tip_ob>=8)&&(tip_ob<=10)))
 		{
-			switch(tip_ob) //в зависимости от объекта вызываем команды 
+			switch(tip_ob) //в зависимости от объекта вызываем команды
 			{
 				case 1: perevod_strlk(komanda,obj_serv);break;
 
@@ -139,6 +140,7 @@ void MAKE_KOMANDA(int ARM,int STAT,int ray)
 								prosto_komanda(komanda);
 								else  dopoln_obj(komanda,ARM);
 								break;
+				case 10:
 				case 9: ob_tums(komanda);break;
 				default: break;
 			}
@@ -220,17 +222,16 @@ void MAKE_MARSH(int ARM,int STAT)
 	if(KOMANDA_MARS[ARM][STAT][0]!=0)//если есть маршрутная
 	{
 		obj=KOMANDA_MARS[ARM][STAT][1]+KOMANDA_MARS[ARM][STAT][2]*256;
-    if((obj==0)||(obj>=KOL_VO))//если объект начала вне базы
+		if((obj<=0)||(obj>=KOL_VO))//если объект начала вне базы
     {
       for(ii=0;ii<12;ii++)KOMANDA_MARS[ARM][STAT][ii]=0;
       return;
-    }
-    komanda=KOMANDA_MARS[ARM][STAT][0];//получить код команды
+		}
+		komanda=KOMANDA_MARS[ARM][STAT][0];//получить код команды
+		if((komanda==189)||(komanda==188))POVTOR_OTKR=0xFF;
 		nach_marsh=inp_ob[obj];
-		if(obj==20)//$$$$$$$$$
-		ii=0;      //$$$$$$$$$
-    obj=KOMANDA_MARS[ARM][STAT][3]+KOMANDA_MARS[ARM][STAT][4]*256;
-    if((obj==0)||(obj>=KOL_VO))//если объект начала вне базы
+		obj=KOMANDA_MARS[ARM][STAT][3]+KOMANDA_MARS[ARM][STAT][4]*256;
+		if((obj<=0)||(obj>=KOL_VO))//если объект начала вне базы
     {
       for(ii=0;ii<12;ii++)KOMANDA_MARS[ARM][STAT][ii]=0;
       return;
@@ -239,19 +240,14 @@ void MAKE_MARSH(int ARM,int STAT)
 		nstrel=KOMANDA_MARS[ARM][STAT][5];
 		pol_strel=KOMANDA_MARS[ARM][STAT][6]+(KOMANDA_MARS[ARM][STAT][7]<<8)+
 		(KOMANDA_MARS[ARM][STAT][8]<<16)+(KOMANDA_MARS[ARM][STAT][9]<<24);
-		RASFASOVKA=0xF;
 		//анализ топологии маршрута и заполнение массива TRASSA или TRASSA1
 		ii=ANALIZ_MARSH(komanda,nach_marsh,end_marsh,nstrel,pol_strel);
 		//ii - номер строки глобального маршрута , куда записан данный маршрут
 		if(ii<Nst*3)TUMS_MARSH(ii);
-		else
-		{
-			Soob_For_Arm(ARM,ii,nach_marsh);
-			ii=0;
-		}
-    RASFASOVKA=0;
-  }
-  return;
+		else add(ii,8888,77);
+//		else Soob_For_Arm(ii,nach_marsh,ii);
+	}
+	return;
 }
 //==========================================================================
 /*************************************************************************\
@@ -261,26 +257,46 @@ void MAKE_MARSH(int ARM,int STAT)
 \****************************************************************а********/
 void otmena_rm(unsigned int objserv)
 {
-  unsigned char tums,//номер стойки
-  gruppa,//код группы для данного объекта
+	unsigned char tums,//номер стойки
+	gruppa,//код группы для данного объекта
 	podgruppa, //код подгруппы
-  kod_cmd, //код команды
-  bit,    //номер бaйта для данного объекта
-  ii;     //вспомогательная переменная
-  unsigned int ob_next;
-  tums=(bd_osn[13]&0xff00)>>8;
-  gruppa='Q';
-  podgruppa=bd_osn[15]&0xff;
-  kod_cmd='F';//отмена поездного маршрута
-  ii=0;
-  objserv=bd_osn[1];
-  while(objserv!=0)
-  {
-
-    if(objserv>=KOL_VO)return;
-    read_FR3(objserv);
-    if(((FR3[20]&0x80)==0x80)&&(ii!=0))break;
-    ii++;
+	kod_cmd, //код команды
+	bit,    //номер бaйта для данного объекта
+	ii;     //вспомогательная переменная
+	int i_m,i_s,i_sig,kontr;
+	unsigned int ob_next;
+	tums=(bd_osn[13]&0xff00)>>8;
+	gruppa='Q';
+	podgruppa=bd_osn[15]&0xff;
+	kod_cmd='F';//отмена поездного маршрута
+	ii=0;
+	objserv=bd_osn[1];
+	if(objserv>0)
+	{ kontr=0;
+		for(i_m=0;i_m<Nst*3;i_m++)
+		{
+			for(i_s=0;i_s<Nst;i_s++)
+			{
+				for(i_sig=0;i_sig<10;i_sig++)
+				{
+					if(MARSHRUT_ALL[i_m].SIG[i_s][i_sig]==objserv)
+					{
+						DeleteMarsh(i_m);
+						kontr=15;
+						break;
+					}
+				}
+				if(kontr!=0)break;
+			}
+			if(kontr!=0)break;
+		}
+	}
+	while(objserv!=0)
+	{
+		if((objserv>=KOL_VO)||(objserv<=0))return;
+		read_FR3(objserv);
+		if(((FR3[20]&0x80)==0x80)&&(ii!=0))break;
+		ii++;
     //снять признаки замыкания
     if((FR3[12]!=0)||(FR3[13]!=0)||(FR3[14]!=0)||(FR3[15]!=0))
     {
@@ -313,7 +329,7 @@ void perevod_strlk(unsigned char command,unsigned int objserv)
   kod_cmd, //код команды для стрелки
   bit;    //номер байта для данного объекта
   //--------------------------------------------------------------
-  int Err=0,i_m,i_s,i_str;
+	int Err=0,i_m,i_s,i_str;
   tums=(bd_osn[13]&0xff00)>>8;
   gruppa='C';
   podgruppa=bd_osn[15]&0xff;
@@ -348,7 +364,7 @@ void perevod_strlk(unsigned char command,unsigned int objserv)
               return;
     //открыть движение по дальней стрелке
     case 36:  FR4[objserv]=FR4[objserv]&0xF7;
-              NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
+							NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
               if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
               return;
 		//	установить макет на стрелку
@@ -383,7 +399,7 @@ void perevod_strlk(unsigned char command,unsigned int objserv)
               return;
     case 41:  kod_cmd='A';break;  //простой перевод стрелки в плюс
     case 42:  kod_cmd='B';break;  //простой перевод в минус
-    case 43:  kod_cmd='Q';break;  //вспомогательный в плюс
+		case 43:  kod_cmd='Q';break;  //вспомогательный в плюс
     case 44:  kod_cmd='R';break;  //вспомогательный в минус
     case 81:  kod_cmd='E';break;  //перевод в плюс на макете
     case 82:  kod_cmd='F';break;  //перевод в минус на макете
@@ -400,7 +416,7 @@ void perevod_strlk(unsigned char command,unsigned int objserv)
   	for(i_m=0;i_m<Nst*3;i_m++)
   	for(i_s=0;i_s<Nst;i_s++)
   	for(i_str=0;i_str<10;i_str++)
-  	if(MARSHRUT_ALL[i_m].STREL[i_s][i_str]==objserv)
+		if((MARSHRUT_ALL[i_m].STREL[i_s][i_str]&0xfff)==objserv)
   	{
 			add(i_m,8888,13);
 			DeleteMarsh(i_m);
@@ -438,151 +454,250 @@ void signaly(unsigned char command,unsigned int objserv)
 	tums=(bd_osn[13]&0xff00)>>8;
 	gruppa='E';
 	podgruppa=bd_osn[15]&0xff;
-  bit=(bd_osn[15]&0xe000)>>13;
+	bit=(bd_osn[15]&0xe000)>>13;
 	switch(command)
-  {
-                 //закрытие движения
-    case 33:  FR4[objserv]=FR4[objserv]|4;
-              NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
-              if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
-              return;
-    case 34:  FR4[objserv]=FR4[objserv]&0xFB;
-              NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
-              if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
-              return;
-    case 95:
-    case 45:  kod_cmd='A';break;
-    case 46:  kod_cmd='B';break;
+	{
+								 //закрытие движения
+		case 33:  FR4[objserv]=FR4[objserv]|4;
+							NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
+							if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
+							return;
+		case 34:  FR4[objserv]=FR4[objserv]&0xFB;
+							NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
+							if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
+							return;
+		case  95:
+		case 111:
+		case  45:  kod_cmd='A';break;
 
-    case 47:  kod_cmd='E';//отмена маневрового маршрута
-              ii=0;
-              for(i_m=0;i_m<Nst*3;i_m++)
-              {
-              	for(i_s=0;i_s<Nst;i_s++)
-              	{
-              		for(i_sig=0;i_sig<10;i_sig++)
-              		{
-              			if(MARSHRUT_ALL[i_m].SIG[i_s][i_sig]==objserv)
-              			{
+		case 112:
+		case  46:  kod_cmd='B';break;
+
+		case 47:  kod_cmd='E';//отмена маневрового маршрута
+							ii=0;
+							//Пройти по всем глобальным
+							for(i_m=0;i_m<Nst*3;i_m++)
+							{
+								//пройти по всем стойкам
+								for(i_s=0;i_s<Nst;i_s++)
+								{
+									//пройти по списку сигналов в стойке
+									for(i_sig=0;i_sig<10;i_sig++)
+									{
+										//если в этом глобальном для этой стойки
+										//обнаружен этот сигнал, то удалить глобальный
+										if(MARSHRUT_ALL[i_m].SIG[i_s][i_sig]==objserv)
+										{
 											add(i_m,8888,15);
 											DeleteMarsh(i_m);
+											ii=15;
+											break;
 										}
-              		}
-              	}
-              }
-              READ_BD(objserv);//прочитать базу сигнала
-							if(bd_osn[1]==0)shag=-1;//для четного сигнала идти назад
-              else shag=1; //для нечетного идти вперед
-              //начать со следующего объекта и идти до СП или УП
-							for(kk=objserv+shag;(kk>0)&&(kk<KOL_VO);)
-              {
-                READ_BD(kk);
-                if((bd_osn[0]==3)||(bd_osn[0]==4))break;
-                if(bd_osn[0]==6)kk=bd_osn[1];
-                else kk=kk+shag;
+									}
+									if(ii==15)break;
+								}
+								if(ii==15)break;
 							}
-              if(kk>=KOL_VO)return; //найти FR3
-              read_FR3(kk);
-              if((FR3[2]==0)&&(FR3[3]==0)) // если разомкнуто
-              {
-                if(objserv>=KOL_VO)return;
-								read_FR3(objserv);
-								if((FR3[24]&0x80)==0)//если сигнал не открывался
+							ii=0;
+							READ_BD(objserv);//прочитать базу сигнала
+							if(bd_osn[1]==0)shag=-1;//для четного сигнала идти назад
+							else shag=1; //для нечетного идти вперед
+							read_FR3(objserv);
+							FR3[20]=FR3[20]&0xF;
+							obnovi(objserv);
+							write_FR3(objserv);
+
+
+							//начать со следующего объекта и идти до СП или УП
+							for(kk=objserv+shag;(kk>0)&&(kk<KOL_VO);)
+							{
+								READ_BD(kk);
+								if((bd_osn[0]==3)||(bd_osn[0]==4))break;
+								if(bd_osn[0]==6)
 								{
-									FR3[12]=0;FR3[13]=0;
+									if((shag==1)&&(bd_osn[3]==1))
+									{
+										kk=bd_osn[1];
+										if(bd_osn[2])
+										{
+											shag=-shag; //если инверсный переход
+											kk=kk+shag;
+										}
+									}
+									else
+									{ //если движемся в четном и переход четный
+										if((shag==-1)&&(bd_osn[3]==0))
+										{
+											kk=bd_osn[1];
+											if(bd_osn[2])
+											{
+												shag=-shag; //если инверсный переход
+												kk=kk+shag;
+											}
+										}
+										else
+										{ //если встрeчный переход
+											kk=kk+shag;
+										}
+									}
+								}
+								else kk=kk+shag;
+							}
+							if((kk>=KOL_VO)||(kk<=0))return; //найти FR3
+							read_FR3(kk);//прочитать состояние УП или СП
+							if((FR3[2]==0)&&(FR3[3]==0)) // если разомкнуто
+							{
+								if((objserv>=KOL_VO)||(objserv<=0))return;
+								read_FR3(objserv);//прочитать состояние сигнала
+								//если для сигнала не фиксировалось открытие
+								//или замыкания перекрывной секции
+								if((FR3[24]&0x80)==0)
+								{
+									FR3[12]=0;FR3[13]=0;  //снять признаки начала
 									obnovi(objserv);
 									write_FR3(objserv);
 								}
 							}
 							while(objserv!=0)
 							{
-								if(objserv>=KOL_VO)return;
+								if((objserv>=KOL_VO)||(objserv<=0))return;
 								READ_BD(objserv);
 								read_FR3(objserv);
-								if(bd_osn[0]==2)
+
+								if(bd_osn[0]==2)//если сигнал
+								//если открывался или было замыкание перекрывной
+								// и это не первый сигнал, то прервать
 								if(((FR3[20]&0x80)==0x80)&&(ii!=0))break;
+
 								//снять признаки замыкания
 								if((FR3[3]==0)&&(FR3[5]==0)&&(FR3[7]==0)&&(ii!=0))
 								{
-									if((FR3[24]&0x80)==0)
+									if((FR3[24]&0x80)==0)//для первого сигнала или для СП
 									{
-										FR3[12]=0;FR3[13]=0;
-                    if((bd_osn[0]>=3)||(bd_osn[0]<=5))obnovi(objserv);
-                  	if(bd_osn[0]==5)
+										FR3[12]=0;FR3[13]=0; //убрать начала или замыкания
+										//если СП, УП или путь - обновить для АРМа
+										if((bd_osn[0]>=3)||(bd_osn[0]<=5))obnovi(objserv);
+										//если путь - обработать сочлененный
+										if(bd_osn[0]==5)
 										{
-                  		if(bd_osn[1]!=0)
-                  		{
-                  			job=bd_osn[1];
-                  			read_FR3(job);
-                  			FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
+											if(bd_osn[1]!=0)
+											{
+												job=bd_osn[1];
+												read_FR3(job);
+												FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
 												FR3[20]=0;FR3[21]=0;
 												write_FR3(job);
 												if(bd_osn[0]<6)obnovi(objserv);
 											}
-                  	}
-                  }
+										}
+									}
 
-                }
+								}
 								ob_next=(FR3[20]&0xF)*256+FR3[21];
 								if(ii){FR3[20]=0;FR3[21]=0;}
-                ii++;
-                //сохранить измененные массивы
-                if(objserv>=KOL_VO)return;
-                write_FR3(objserv);
-                objserv=ob_next;
-              }
-              break;
+								ii++;
+								//сохранить измененные массивы
+								if((objserv>=KOL_VO)||(objserv<=0))return;
+								write_FR3(objserv);
+								objserv=ob_next;
+							}
+							break;
 
-    case 48:  kod_cmd='F';//отмена поездного маршрута
-              ii=0;
-              for(i_m=0;i_m<Nst*3;i_m++)
-               {
-              	for(i_s=0;i_s<Nst;i_s++)
-              	{
-              		for(i_sig=0;i_sig<10;i_sig++)
-              		{
+		case 48:  kod_cmd='F';//отмена поездного маршрута
+							ii=0;
+							//поиск сигнала в таблице маршрутов
+							for(i_m=0;i_m<Nst*3;i_m++)
+							{
+								for(i_s=0;i_s<Nst;i_s++)
+								{
+									for(i_sig=0;i_sig<10;i_sig++)
+									{
 										if(MARSHRUT_ALL[i_m].SIG[i_s][i_sig]==objserv)
-              			{
+										{
+											//если сигнал найден-удалить маршрут с этим сигналом
 											add(i_m,8888,14);
 											DeleteMarsh(i_m);
+											ii=15;
+											break;
 										}
-              		}
-              	}
-              }
-              READ_BD(objserv);
-              if(bd_osn[1]==0)shag=-1;
-              else shag=1;
-              for(kk=objserv+shag;(kk>0)&&(kk<KOL_VO);)
-              {
-                READ_BD(kk);
-                if((bd_osn[0]==3)||(bd_osn[0]==4))break;
-								if(bd_osn[0]==6)kk=bd_osn[1];
-                else kk=kk+shag;
-              }
-              if(kk>=KOL_VO)return;
-              read_FR3(kk);
-
-              if((FR3[2]==0)&&(FR3[3]==0))
-              {
-                if(objserv>=KOL_VO)return;
-                read_FR3(objserv);
-                if((FR3[24]&0x80)==0)
-                {
-                  FR3[12]=0;FR3[13]=0;
-                  FR3[14]=0;FR3[15]=0;
-                  obnovi(objserv);
-                  write_FR3(objserv);
-                }
-                read_FR3(kk);
-              }
-              while(objserv!=0)
+									}
+									if(ii==15)break;
+								}
+								if(ii==15)break;
+							}
+							ii=0;
+							READ_BD(objserv);//прочитать объект сигнала
+							//определить направление движения
+							if(bd_osn[1]==0)shag=-1;
+							else shag=1;
+							//прочитать состояние сигнала
+							read_FR3(objserv);
+							FR3[20]=FR3[20]&0xF;//снять признаки начала
+							obnovi(objserv); //установить признак новизны для объекта
+							write_FR3(objserv); //записать в массив FR3
+							//пройти по объектам от данного сигнала вперед или назад
+							//до упора, для поиска перекрывной секции
+							for(kk=objserv+shag;(kk>0)&&(kk<KOL_VO);)
 							{
-                if(objserv>=KOL_VO)return;
-                read_FR3(objserv);
+								READ_BD(kk);//прочитать объект
+								//если это СП или УП - прерваться
+								if((bd_osn[0]==3)||(bd_osn[0]==4))break;
+								//если переход - то идти дальше
+								if(bd_osn[0]==6)
+								{
+									if((shag==1)&&(bd_osn[3]==1))
+									{
+										kk=bd_osn[1];
+										if(bd_osn[2])
+										{
+											shag=-shag; //если инверсный переход
+											kk=kk+shag;
+										}
+									}
+									else
+									{ //если движемся в четном и переход четный
+										if((shag==-1)&&(bd_osn[3]==0))
+										{
+											kk=bd_osn[1];
+											if(bd_osn[2])
+											{
+												shag=-shag; //если инверсный переход
+												kk=kk+shag;
+											}
+										}
+										else
+										{ //если встрeчный переход
+											kk=kk+shag;
+										}
+									}
+								}
+								else kk=kk+shag;
+							}
+							if((kk>=KOL_VO)||(kk<=0))return;
+							read_FR3(kk); //прочитать состояние УП или СП
+							//если нет замыкания и нет разделки
+							if((FR3[2]==0)&&(FR3[3]==0))
+							{
+								if((objserv>=KOL_VO)||(objserv<=0))return;
+								read_FR3(objserv);//прочитать сигнал
+								//если
+								if((FR3[24]&0x80)==0)
+								{
+									FR3[12]=0;FR3[13]=0;
+									FR3[14]=0;FR3[15]=0;
+									obnovi(objserv);
+									write_FR3(objserv);
+								}
+								read_FR3(kk);
+							}
+							while(objserv!=0)
+							{
+								if((objserv>=KOL_VO)||(objserv<=0))return;
+								read_FR3(objserv);
 								READ_BD(objserv);
-                if((bd_osn[0]==2)&&((FR3[20]&0x80)==0x80)&&(ii))break;
-                if((bd_osn[0]==7)&&(bd_osn[1]==15))
-                {
+								if((bd_osn[0]==2)&&((FR3[20]&0x80)==0x80)&&(ii))break;
+								if((bd_osn[0]==7)&&(bd_osn[1]==15))
+								{
                 	sp_in_put=bd_osn[3];
                 	read_FR3(sp_in_put);
                 	FR3[12]=0;FR3[13]=0;
@@ -598,7 +713,7 @@ void signaly(unsigned char command,unsigned int objserv)
                 		obnovi(spar_sp);
                 		write_FR3(spar_sp);
                 	}
-                }
+								}
                 if(bd_osn[0]==5)
                 {
                 	if(bd_osn[1]!=0)
@@ -616,7 +731,7 @@ void signaly(unsigned char command,unsigned int objserv)
 
 								if((FR3[1]==0)&&(FR3[3]==0)&&(FR3[5]==0)&&(FR3[7]==0)&&(ii!=0))
                 {
-                	FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
+									FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
                 	if((bd_osn[0]>=3)&&(bd_osn[0]<=5))
                   {
 	                  obnovi(objserv);
@@ -632,12 +747,12 @@ void signaly(unsigned char command,unsigned int objserv)
                 //сохранить измененные массивы на виртуальном диске
                 write_FR3(objserv);
                 objserv=ob_next;
-              }
+							}
               break;
     case 49:  kod_cmd='A';break;
     case 50:  kod_cmd='B';break;
     case 62:  kod_cmd='B';break;
-    case 85:  if(objserv>=KOL_VO)return;
+		case 85:  if((objserv>=KOL_VO)||(objserv<=0))return;
     					read_FR3(objserv);
               //снять признаки замыкания
               FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
@@ -661,15 +776,15 @@ void sp_up_and_razd(unsigned char command,unsigned int objserv,int arm)
 
   unsigned char tums,//номер стойки
   gruppa,//код группы для данного объекта
-  podgruppa, //код подгруппы для стрелки
+	podgruppa, //код подгруппы для стрелки
   kod_cmd, //код команды для стрелки
   bit;    //номер бaйта для данного объекта
   tums=(bd_osn[13]&0xff00)>>8;
   gruppa='F';
-  podgruppa=bd_osn[15]&0xff;
+	podgruppa=bd_osn[15]&0xff;
   switch(command)
   {
-    case 85:  if(objserv>=KOL_VO)return;
+		case 85:  if((objserv>=KOL_VO)||(objserv<=0))return;
     					read_FR3(objserv);
               //снять признаки замыкания
               FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
@@ -721,9 +836,9 @@ void sp_up_and_razd(unsigned char command,unsigned int objserv,int arm)
     case 66:  kod_cmd='L';break; //включить выдержку времени ГРИ
 
     case 6:
-    case 9:
+		case 9:
     case 10:
-    case 1:   if(KNOPKA_OK[arm]==1){kod_cmd='T';break;}
+		case 1:   if(KNOPKA_OK[arm]==1){kod_cmd='T';break;}
               else return;
 
     case 198:
@@ -754,9 +869,9 @@ void puti(unsigned char command,unsigned int objserv)
   int job;
   switch(command)
   { //нормализация пути
-		case 85:  if(objserv>=KOL_VO)return;
+		case 85:  if((objserv>=KOL_VO)||(objserv<=0))return;
               read_FR3(objserv);
-              //снять признаки замыкания
+							//снять признаки замыкания
               FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
               FR3[20]=0;FR3[21]=0;
               obnovi(objserv);            
@@ -765,7 +880,7 @@ void puti(unsigned char command,unsigned int objserv)
               if(bd_osn[1]!=0)
               {
               	job=bd_osn[1];
-                if(job>=KOL_VO)return;
+								if((job>=KOL_VO)||(job<=0))return;
                 read_FR3(job);
               	//снять признаки замыкания
               	FR3[12]=0;FR3[13]=0;FR3[14]=0;FR3[15]=0;
@@ -778,35 +893,35 @@ void puti(unsigned char command,unsigned int objserv)
     case 33:  FR4[objserv]=FR4[objserv]|4;
               NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
               if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
-              READ_BD(objserv);
-              if(bd_osn[1]!=0)
-              {
-              	job=bd_osn[1];
-                FR4[job]=FR4[job]|4;
-                NOVIZNA_FR4[new_fr4++]=job;//запомнить номер обновленного объекта
-                if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
-              }
-              return;
-    //открыть движение по пути
-    case 34:  FR4[objserv]=FR4[objserv]&0xFB;
+							READ_BD(objserv);
+							if(bd_osn[1]!=0)
+							{
+								job=bd_osn[1];
+								FR4[job]=FR4[job]|4;
+								NOVIZNA_FR4[new_fr4++]=job;//запомнить номер обновленного объекта
+								if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
+							}
+							return;
+		//открыть движение по пути
+		case 34:  FR4[objserv]=FR4[objserv]&0xFB;
 							NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
-              if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
-              READ_BD(objserv);
-              if(bd_osn[1]!=0)
-              {
-              	job=bd_osn[1];
-                FR4[job]=FR4[job]&0xFB;
-                NOVIZNA_FR4[new_fr4++]=job;//запомнить номер обновленного объекта
-                if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
-              }
-              return;
-    //закрытие движения на электротяге
-    case 118:	FR4[objserv]=FR4[objserv]|8;
-          		NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
-              if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
-              READ_BD(objserv);
-              if(bd_osn[1]!=0)
-              {
+							if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
+							READ_BD(objserv);
+							if(bd_osn[1]!=0)
+							{
+								job=bd_osn[1];
+								FR4[job]=FR4[job]&0xFB;
+								NOVIZNA_FR4[new_fr4++]=job;//запомнить номер обновленного объекта
+								if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
+							}
+							return;
+		//закрытие движения на электротяге
+		case 118:	FR4[objserv]=FR4[objserv]|8;
+							NOVIZNA_FR4[new_fr4++]=objserv;//запомнить номер обновленного объекта
+							if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
+							READ_BD(objserv);
+							if(bd_osn[1]!=0)
+							{
               	job=bd_osn[1];
                 FR4[job]=FR4[job]|8;
                 NOVIZNA_FR4[new_fr4++]=job;//запомнить номер обновленного объекта
@@ -826,7 +941,7 @@ void puti(unsigned char command,unsigned int objserv)
                 NOVIZNA_FR4[new_fr4++]=job;//запомнить номер обновленного объекта
 								if(new_fr4>=10)new_fr4=0; //если не передано более 10 новизн,начать с 0
               }
-              return;
+							return;
 
     //закрытие движения на электротяге переменного тока
     case 120:	FR4[objserv]=FR4[objserv]|2;
@@ -898,65 +1013,74 @@ void dopoln_obj(unsigned char command,int arm)
 {
   unsigned char tums,//номер стойки
   gruppa,//код группы для данного объекта
-  podgruppa, //код подгруппы для стрелки
-  kod_cmd, //код команды для стрелки
-  bit;    //номер бaйта для данного объекта
-  tums=(bd_osn[13]&0xff00)>>8;
-  gruppa='Q';
-  podgruppa=bd_osn[15]&0xff;
-  switch(command)
-  {
-    case 8:
-    case 200: if(KNOPKA_OK[arm]==1){kod_cmd='X';break;}
-              else return;
+	podgruppa, //код подгруппы для стрелки
+	kod_cmd, //код команды для стрелки
+	bit;    //номер бaйта для данного объекта
+	tums=(bd_osn[13]&0xff00)>>8;
+	gruppa='Q';
+	podgruppa=bd_osn[15]&0xff;
+	switch(command)
+	{
+		case 8:
+		case 200: if(KNOPKA_OK[arm]==1){kod_cmd='X';break;}
+							else return;
 
-    case 55: if(KNOPKA_OK[arm]==1){kod_cmd='N';break;}
-             else return;
+		case 55: if(KNOPKA_OK[arm]==1){kod_cmd='N';break;}
+						 else return;
 
-    case 199:
-    case 195:
-    case 202:
-    case 3:
-    case 7:
-    case 194:
-    case 2:  if(KNOPKA_OK[arm]==1){kod_cmd='T';break;}
-             else return;
+		case 198:
+		case 199:
+		case 195:
+		case 202:
+		case 3:
+		case 6:
+		case 7:
+		case 194:
+		case 2:  if(KNOPKA_OK[arm]==1){kod_cmd='T';break;}
+						 else return;
 
-    case 60: if(KNOPKA_OK[arm]==1){kod_cmd='A';break;}
-             else return;
+		case 103:
+		case 60: if(KNOPKA_OK[arm]==1){kod_cmd='A';break;}
+						 else return;
 
-    case 53:
-    case 75:
-    case 105:
-    case 67:
+		case 104: if(KNOPKA_OK[arm]==1){kod_cmd='M';break;}
+							else return;
+
+		case 125: {kod_cmd='C';break;}
+
+		case 53:
+		case 75:
+		case 105:
+		case 67:
 		case 61: kod_cmd='A';break;
 
 
 
-    case 197: if(KNOPKA_OK[arm]==1){kod_cmd='M';break;}
-             else return;
+		case 197: if(KNOPKA_OK[arm]==1){kod_cmd='M';break;}
+						 else return;
 
 		case 106:
-    case 68: kod_cmd='M';break;
+		case 68: kod_cmd='M';break;
 
-    case 63:
-    case 76:
-    case 78:
-    case 59:
-    case 57: kod_cmd='B';break;
+		case 63:
+		case 76:
+		case 78:
+		case 59:
+		case 57: kod_cmd='B';break;
 
 
-    case 113:
-    case 86:
-    case 56:
-    case 77:
-    case 58: kod_cmd='N';break;
+		case 113:
+		case 86:
+		case 56:
+		case 77:
+		case 98:
+		case 58: kod_cmd='N';break;
 
-    default: return;
-  }
-  bit=(bd_osn[15]&0xe000)>>13;
-  ZAGRUZ_KOM_TUMS(tums,gruppa,podgruppa,bit,kod_cmd);
-  return;
+		default: return;
+	}
+	bit=(bd_osn[15]&0xe000)>>13;
+	ZAGRUZ_KOM_TUMS(tums,gruppa,podgruppa,bit,kod_cmd);
+	return;
 }
 //============================================================================
 /*************************************************************************\
@@ -1002,17 +1126,21 @@ void prosto_komanda(unsigned char command)
 \***************************************************/
 void ob_tums(unsigned char command)
 {
-  unsigned char tums,//номер стойки
-  gruppa,//код группы для данного объекта
-  podgruppa, //код подгруппы для стрелки
-  kod_cmd, //код команды для стрелки
-  bit;    //номер бaйта для данного объекта
-  int ii;
-  if((bd_osn[0]&0xf)!=9){for(ii=0;ii<16;ii++)bd_osn[ii]=0;return;}
-  tums=(bd_osn[13]&0xff00)>>8;
-  gruppa='L';
-  podgruppa=bd_osn[15]&0xff;
-  switch(command)
+	unsigned char tums,//номер стойки
+	tip, //тип объекта контроллера
+	gruppa,//код группы для данного объекта
+	podgruppa, //код подгруппы для стрелки
+	kod_cmd, //код команды для стрелки
+	bit;    //номер бaйта для данного объекта
+	int ii;
+	tip=bd_osn[0]&0xf;
+	if((tip!=9)&&(tip!=10))
+	{for(ii=0;ii<16;ii++)bd_osn[ii]=0;return;}
+	tums=(bd_osn[13]&0xff00)>>8;
+	if(tip==9)gruppa='L';
+	if(tip==10)gruppa='T';
+	podgruppa=bd_osn[15]&0xff;
+	switch(command)
   {
 
     case 97: kod_cmd='D';break;
@@ -1036,10 +1164,10 @@ void ZAGRUZ_KOM_TUMS(char tms,char grp,char pdgrp,char bt,char kd_cmd)
 {
 	int i,j;
   unsigned char adr_kom;
-  for(i=0;i<15;i++)KOMANDA_ST[tms-1][i]=0;
+	for(i=0;i<15;i++)KOMANDA_ST[tms-1][i]=0;
   switch(tms)
   {
-    case 1: adr_kom='G';break;
+		case 1: adr_kom='G';break;
     case 2: adr_kom='K';break;
     case 3: adr_kom='M';break;
     case 4: adr_kom='N';break;
@@ -1054,9 +1182,9 @@ void ZAGRUZ_KOM_TUMS(char tms,char grp,char pdgrp,char bt,char kd_cmd)
   KOMANDA_ST[tms-1][2]=grp;
   KOMANDA_ST[tms-1][3]=pdgrp;
   for(j=4;j<10;j++)KOMANDA_ST[tms-1][j]='|';
-  KOMANDA_ST[tms-1][3+bt]=kd_cmd;
-  KOMANDA_ST[tms-1][10]=check_summ(KOMANDA_ST[tms-1]);
-  KOMANDA_ST[tms-1][11]=')';
+	KOMANDA_ST[tms-1][3+bt]=kd_cmd;
+	KOMANDA_ST[tms-1][10]=check_summ(KOMANDA_ST[tms-1]);
+	KOMANDA_ST[tms-1][11]=')';
   KOMANDA_ST[tms-1][12]=0;
 	add(tms-1,9999,0);
 	if(ACTIV!=1)
@@ -1065,12 +1193,12 @@ void ZAGRUZ_KOM_TUMS(char tms,char grp,char pdgrp,char bt,char kd_cmd)
 		{
 			putch1(0x10,0xc,1,Y_KOM);
 			if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1);
-			else putch1(' ',0xc,1,47);
+			else putch1(' ',0xc,1,46);
 			for(i=0;i<12;i++)putch1(KOMANDA_ST[tms-1][i],0xc,55+i,Y_KOM);
 			Y_KOM++;
 			puts1("                                   ",0xa,3,Y_KOM);
 			puts1("             ",0xa,55,Y_KOM);
-			if(Y_KOM>=48)Y_KOM=3;
+			if(Y_KOM>=47)Y_KOM=3;
 		}
 		for(i=0;i<15;i++)KOMANDA_ST[tms-1-1][i]=0;
 	}
@@ -1103,18 +1231,13 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
   n_sig=0,
   tums;
 
-  unsigned int kod_beg,kod_end;
+	unsigned int kod_beg,kod_end;
 	PROHOD=0;
 	PROHOD1=0;
 	//очистить массив трассы
 	ZERO_TRASSA();
 	//сбросить индексы сигналов, стрелок и СП_УП
-	for(ii=0;ii<Nst;ii++)
-	{
-		ind_sig[ii]=0;
-		ind_str[ii]=0;
-		ind_sp[ii]=0;
-	}
+	for(ii=0;ii<Nst;ii++){ind_sig[ii]=0;ind_str[ii]=0;ind_sp[ii]=0;}
 	KOM=KOM&0xFF;//получить байт команды
 	//сформировать код команды маршрута по байту команды
 	switch(KOM)
@@ -1166,10 +1289,6 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 			if(i_n>=Nst*3)
 			{
 				i_n=0;
-				//проверяем наличие установленного начала на этом сигнале
-				read_FR3(NACH);
-				if((FR3[13]!=0)||(FR3[15]!=0))
-				return(1050);//если уже есть начало
 				//сканировать на наличие другого маршрута от этого сигнала
 				while(MARSHRUT_ALL[i_n].NACH!=NACH)
 				{
@@ -1177,20 +1296,23 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 					if(i_n>=(Nst*3))break;
 				}
 				if(i_n<Nst*3)
-					return(1050); //если от этого сигнала уже задаётся маршрут
+				{
+					return(1050);//если от сигнала уже задаётся маршрут
+				}
 				else
 				{
 					i_n=0;
+
 					//сканировать таблицу на занятость
-					while(MARSHRUT_ALL[i_n].NACH!=0)
-					{
-						i_n++;
-						if(i_n>=(Nst*3))break;
-					}
+					while(MARSHRUT_ALL[i_n].NACH!=0){i_n++;if(i_n>=(Nst*3))break;}
 					if(i_n>=Nst*3)ERROR_MARSH=1004; //если вся таблица занята
 				}
 			}
-			else  DeleteMarsh(i_n);
+			else
+			{
+				if(POVTOR_OTKR!=0)DeleteMarsh(i_n);
+				else return(25000);
+			}
 
 			if(ERROR_MARSH==0)// если все в порядке - внести маршрут в таблицу
 			{
@@ -1220,8 +1342,10 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 				{
 					//если стрелка
 					case 1:
+						read_FR3(ii);
+						if(FR3[9]!=0)return(2000+ii);//стрелка потеряла контроль
+						if(FR3[11]!=0)return(3000+ii);//стрелка непарафазна
 						//занести стрелку в список стрелок маршрута
-						MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
 						if(((bd_osn[7]==0)&&(shag==-1))|| //если стрелка противошерстная
 						((bd_osn[7]==1)&&(shag==1)))
 						{
@@ -1229,6 +1353,8 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 							{
 								if((bd_osn[8]&0x8000)==0)//если сброс по минусу
 								{
+//$$1
+							 MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
 									//записать стрелку с признаком сброса и положения "+"
 									TRASSA[jj].object=ii|0x4000;
 									read_FR3(ii);
@@ -1247,6 +1373,8 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 								//если сброс по плюсу
 								else
 								{
+//$$2
+									MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii|0x1000;
 									//записать стрелку с признаком сброса и положения "-"
 									TRASSA[jj].object=ii|0xC000;
 									//если стрелка не в минусе
@@ -1273,6 +1401,8 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 
 							if((POL&(1<<tek_strel))==0)//если данная стрелка нужна в плюсе
 							{
+//$$3
+								MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
 								//записать стрелку в трассу с признаком "+"
 								TRASSA[jj].object=ii|0x4000;
 								//если стрелка не в плюсе
@@ -1290,6 +1420,8 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 							//если данная стрелка нужна в минусе
 							else
 							{
+//$$4
+								MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii|0x1000;
 								//записать стрелку в трассу с "-"
 								TRASSA[jj].object=ii|0xC000;
 								//если стрелка не в минусе
@@ -1310,6 +1442,8 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 						{ //если пред.объект в другой строке записать с признаком "-"
 							if(stroka_tek!=stroka_pred)
 							{
+//$$5
+								MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii|0x1000;
 								//установить признак минусового положения
 								TRASSA[jj].object=ii|0x8000;
 								//если стрелка не в минусе
@@ -1323,6 +1457,8 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 							//если стрелка нужна в плюсе
 							else
 							{
+//$$6
+								MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
 								TRASSA[jj].object=ii;//записать стрелку в трассу с "+"
 								//если стрелка не в плюсе
 								if((FR3[1]!=1)||(FR3[3]!=0))
@@ -1339,21 +1475,43 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 					//обработка базового перехода
 					case 6:
 						TRASSA[jj].object=ii;
-						if((shag==1)&&(bd_osn[3]==1))ii=bd_osn[1];
-						else
-							if((shag==-1)&&(bd_osn[3]==0))ii=bd_osn[1];
-							else ii=ii+shag;
+						//если движемся в нечетном и переход нечетный
+						if((shag==1)&&(bd_osn[3]==1))
+						{
+							ii=bd_osn[1];
+							if(bd_osn[2])
+							{
+								shag=-shag; //если инверсный переход
+								ii=ii+shag;
+							}
 
-						if(bd_osn[2])shag=-shag; //если инверсный переход
+						}
+						else
+							{ //если движемся в четном и переход четный
+								if((shag==-1)&&(bd_osn[3]==0))
+								{
+									ii=bd_osn[1];
+									if(bd_osn[2])
+									{
+										shag=-shag; //если инверсный переход
+										ii=ii+shag;
+									}
+								}
+								else
+								{ //если встрeчный переход
+									ii=ii+shag;
+								}
+							}
+
 						break;
 					//обработка доп.зависимости
 					case 7:
 						TRASSA[jj].object=ii;
-						if(bd_osn[1]==15) //если проверка стрелки в пути
-						{
-							ERROR_MARSH=ERROR_MARSH+ANALIZ_ST_IN_PUT(jj,kod_marsh,tums,i_n,ind_str[tums]);
-						}
-						if(bd_osn[1]==14)ERROR_MARSH=ERROR_MARSH+tst_str_ohr();
+//						if(bd_osn[1]==15) //если проверка стрелки в пути
+//						{
+//							ERROR_MARSH=ERROR_MARSH+ANALIZ_ST_IN_PUT(jj,kod_marsh,tums,i_n,ind_str[tums]);
+//						}
+//						if(bd_osn[1]==14)ERROR_MARSH=ERROR_MARSH+tst_str_ohr();
 						ii=ii+shag;
 						break;
 
@@ -1361,10 +1519,32 @@ int ANALIZ_MARSH(int KOM,int NACH,int END,int Nstrel,unsigned long POL)
 						TRASSA[jj].object=ii;
 						//если СП или УП - записать объект в список
 						if((bd_osn[0]==3)||(bd_osn[0]==4))
-						MARSHRUT_ALL[i_n].SP_UP[tums][ind_sp[tums]++]=ii;
-
+						{
+							read_FR3(ii);
+//							if(FR3[11]!=0)ERROR_MARSH=3000+ii;//если СП или УП непарафазны
+//							if(((KOM!=191)&&(KOM!=188)&&(KOM!=71))||(bd_osn[0]==3))
+//							{
+//								if(FR3[1]!=0)ERROR_MARSH=4000+ii;//если СП или УП занят
+//							}
+//							if(FR3[3]!=0)ERROR_MARSH=5000+ii;//если СП или УП замкнут
+//							if(FR3[5]!=0)ERROR_MARSH=6000+ii;//если СП или УП в разделке
+//							if(FR3[7]!=0)ERROR_MARSH=7000+ii;//если в работе МСП
+							if(ERROR_MARSH>1000)
+							return(ERROR_MARSH);
+							MARSHRUT_ALL[i_n].SP_UP[tums][ind_sp[tums]++]=ii;
+						}
 						if(bd_osn[0]==2)//если объект - сигнал
 						{
+//							if(bd_osn[11]!=43690)
+//							{
+								read_FR3(ii);//прочитать текущее состояние сигнала
+//								if(FR3[11]!=0)return(3000+ii);//если сигнал непарафазен
+								//если направление маршрута - нечетное,а сигнал четный
+								//или направление маршрута - четное,а сигнал нечетный
+//								if(((shag==1)&&(bd_osn[1]==0))||
+//								((shag==-1)&&(bd_osn[1]==1)))
+//								if((FR3[1]!=0)||(FR3[3]!=0))return(8000+ii); //если сигнал открыт
+//							}
 							switch(shag)
 							{ //нечетное направление
 								case 1:
@@ -1526,14 +1706,14 @@ R2:
 			case 71:	kod_marsh1='d'; break;  //колонка
 			default:	kod_marsh1=0;	ERROR_MARSH=1005; //недопустимая команда
 		}
-    READ_BD(NACH);
+		READ_BD(NACH);
 		if(bd_osn[1]==0)shag=-1;//если четный сигнал
-    else
+		else
 			if(bd_osn[1]==1)shag=1;//если сигнал нечетный
 			else return(1001);
 
 		if(bd_osn[0]!=2)ERROR_MARSH=1001;
-    else
+		else
 			if(((KOM==191)||(KOM==188)||(KOM==71))&&(bd_osn[6]==1))ERROR_MARSH=1002;
 			else
 				if(((KOM==192)||(KOM==189))&&(bd_osn[6]==0))ERROR_MARSH=1003;
@@ -1555,31 +1735,24 @@ R2:
 					if(i_n>=Nst*3)
 					{
 						i_n=0;
-						//проверяем наличие установленного начала на этом сигнале
-						read_FR3(NACH);
-						if((FR3[13]!=0)||(FR3[15]!=0))
-						return(1050);//если уже есть начало
 						//сканировать на наличие другого маршрута от этого сигнала
 						while(MARSHRUT_ALL[i_n].NACH!=NACH)
 						{
 							i_n++;
 							if(i_n>=(Nst*3))break;
 						}
-						if(i_n<Nst*3)
-						return(1050); //если от этого сигнала уже задаётся маршрут
+						if(i_n<Nst*3)return(1050); //если от этого сигнала уже задаётся маршрут
 						else
 						{
 							i_n=0;
 							//сканировать таблицу на занятость
-							while(MARSHRUT_ALL[i_n].NACH!=0)
-							{
-								i_n++;
-								if(i_n>=(Nst*3))break;
-							}
+							while(MARSHRUT_ALL[i_n].NACH!=0){i_n++;if(i_n>=(Nst*3))break;}
 							if(i_n>=Nst*3)ERROR_MARSH=1004; //если вся таблица занята
 						}
 					}
-					else DeleteMarsh(i_n);
+					else
+					if(POVTOR_OTKR!=0)DeleteMarsh(i_n);
+					else return(25000);
 					if(ERROR_MARSH==0)
 					{
 						MARSHRUT_ALL[i_n].KMND=kod_marsh1;
@@ -1600,192 +1773,245 @@ R2:
 						TRASSA1[jj].stoyka=(bd_osn[13]&0x0f00)>>8;//запомнить стойку
 						tums=TRASSA1[jj].stoyka-1;
 						TRASSA1[jj].tip=bd_osn[0]&0xff;
-            switch(bd_osn[0])//далее двигаться в зависимости от объекта
-            {
-              //если стрелка
-							case 1:	MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
-              	if(((bd_osn[7]==0)&&(shag==-1))|| //если стрелка противошерстная
-                ((bd_osn[7]==1)&&(shag==1)))
-                {
-                	if((bd_osn[8]&0x4000)==0x4000)//если стрелка не передается из АРМ
-                  {
+						switch(bd_osn[0])//далее двигаться в зависимости от объекта
+						{
+							//если стрелка
+							case 1:
+									read_FR3(ii);
+//								if(FR3[9]!=0)return(2000+ii);//стрелка потеряла контроль
+//								if(FR3[11]!=0)return(3000+ii);//стрелка непарафазна
+//$$0
+								if(((bd_osn[7]==0)&&(shag==-1))|| //если стрелка противошерстная
+								((bd_osn[7]==1)&&(shag==1)))
+								{
+									if((bd_osn[8]&0x4000)==0x4000)//если стрелка не передается из АРМ
+									{
 										if((bd_osn[8]&8000)==0)//если сброс по минусу
-                    {
-                    	TRASSA1[jj].object=ii|0x4000;
+										{
+//$$1
+											MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
+											TRASSA1[jj].object=ii|0x4000;
 											read_FR3(ii);
-                      if((FR3[1]!=1)||(FR3[3]!=0))
-                      {
+											//если стрелка не в плюсе
+											if((FR3[1]!=1)||(FR3[3]!=0))
+											{
 												MARSHRUT_ALL[i_n].KOL_STR[tums]++;
 												MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST&0xC0;
 												MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST|3;
 											}
 											ii=ii+shag;
-                    }
-                    else
-                    {
+										}
+										else  //если сброс по плюсу
+										{
+//$$2
+											MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii|0x1000;
 											TRASSA[jj].object=ii|0xC000;
 											read_FR3(ii);
-                      if((FR3[1]!=0)||(FR3[3]!=1))
-                      {
+											//если стрелка не в минусе
+											if((FR3[1]!=0)||(FR3[3]!=1))
+											{
 												MARSHRUT_ALL[i_n].KOL_STR[tums]++;
 												MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST&0xC0;
 												MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST|3;
 											}
 											ii=bd_osn[2];
-         	          }
-                    if((bd_osn[8]&0x2000)==0x2000)//если нен передачи ТУМС
-                    {
-                    	TRASSA1[jj].object=ii|0x2000;
-                      ii=ii+shag;
-                    }
-                    break;
-                  }
+										}
+										if((bd_osn[8]&0x2000)==0x2000)//если нет передачи ТУМС
+										{
+											TRASSA1[jj].object=ii|0x2000;
+										}
+										break;
+									}
 									if(tek_strel>Nstrel){ERROR_MARSH=1006;break;}
 
-                 	if((POL&(1<<tek_strel))==0)//если данная стрелка нужна в плюсе
-                  {
-                  	//записать стрелку в трассу с признаком "+"
-                    TRASSA1[jj].object=ii|0x4000;
-                    read_FR3(ii);
+									if((POL&(1<<tek_strel))==0)//если данная стрелка нужна в плюсе
+									{
+//$$3
+										MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
+										//записать стрелку в трассу с признаком "+"
+										TRASSA1[jj].object=ii|0x4000;
 										if((FR3[1]!=1)||(FR3[3]!=0))//если стрелка не в плюсе
 										{
 											MARSHRUT_ALL[i_n].KOL_STR[tums]++;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST&0xC0;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST|3;
 										}
-                    ii=ii+shag;
-                  }
-                  else
-                  {
-                  	TRASSA1[jj].object=ii|0xC000;//записать стрелку в трассу с "-"
-										read_FR3(ii);
+										ii=ii+shag;
+									}
+									//если стрелка нужна в минусе
+									else
+									{
+//$$4
+										MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii|0x1000;
+										TRASSA1[jj].object=ii|0xC000;//записать стрелку в трассу с "-"
 										if((FR3[1]!=0)||(FR3[3]!=1))//если стрелка не в минусе
-                    {
+										{
 											MARSHRUT_ALL[i_n].KOL_STR[tums]++;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST&0xC0;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST|3;
 										}
-                    ii=bd_osn[2];//осуществить переход по минусу стрелки
+										ii=bd_osn[2];//осуществить переход по минусу стрелки
 									}
-                  tek_strel++;
-                }
-                else
-                if(((bd_osn[7]==1)&&(shag==-1))|| //если стрелка пошерстная
-                ((bd_osn[7]==0)&&(shag==1)))
-                { //если предыдущий объект в другой строке
-                  //записать с признаком "-"
-                  if(stroka_tek!=stroka_pred)
+									tek_strel++;
+								}
+								else
+								if(((bd_osn[7]==1)&&(shag==-1))|| //если стрелка пошерстная
+								((bd_osn[7]==0)&&(shag==1)))
+								{ //если предыдущий объект в другой строке
+									//записать с признаком "-"
+									if(stroka_tek!=stroka_pred)
 									{
+//$$5
+										MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii|0x1000;
 										TRASSA1[jj].object=ii|0x8000;  //записать с признаком "-"
-										read_FR3(ii);
-                    if((FR3[1]!=0)||(FR3[3]!=1)) //если стрелка не в минусе
-                    {
+										if((FR3[1]!=0)||(FR3[3]!=1)) //если стрелка не в минусе
+										{
 											MARSHRUT_ALL[i_n].KOL_STR[tums]++;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST&0xC0;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST|3;
 										}
 
-                  }
-                  else
+									}
+									else//если стрелка нужна в плюсе
 									{
+//$$6
+										MARSHRUT_ALL[i_n].STREL[tums][ind_str[tums]++]=ii;
 										TRASSA1[jj].object=ii;//записать стрелку в трассу с "+"
-                   	read_FR3(ii);
-                    if((FR3[1]!=1)||(FR3[3]!=0)) //если стрелка не в плюсе
-                    {
+										if((FR3[1]!=1)||(FR3[3]!=0)) //если стрелка не в плюсе
+										{
 											MARSHRUT_ALL[i_n].KOL_STR[tums]++;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST&0xC0;
 											MARSHRUT_ALL[i_n].SOST=MARSHRUT_ALL[i_n].SOST|3;
 										}
-                  }
-                  ii=ii+shag;
-                }
-                break;
+									}
+									ii=ii+shag;//двигаться по строке топологии
+								}
+								break;
 
 							case 6: TRASSA1[jj].object=ii;
-                      //если направление движения нечетное и направление
-                      //перехода тоже нечетное
-                      if((shag==1)&&(bd_osn[3]==1))ii=bd_osn[1];
-                      else
-												if((shag==-1)&&(bd_osn[3]==0))ii=bd_osn[1];
-                      	else ii=ii+shag;
-                      if(bd_osn[2])shag=-shag;
-                      break;
+											//если направление движения нечетное и направление
+											//перехода тоже нечетное
+											if((shag==1)&&(bd_osn[3]==1))
+											{
+												ii=bd_osn[1];
+												if(bd_osn[2])//если переход инверсный
+												{
+													shag=-shag;
+													ii=ii+shag;
+												}
+											}
+											else
+											{
+												if((shag==-1)&&(bd_osn[3]==0))
+												{
+													ii=bd_osn[1];
+													if(bd_osn[2])
+													{
+														shag=-shag;
+														ii=ii+shag;
+													}
+												}
+												else ii=ii+shag;
+											}
+											break;
 
 
-              case 7:	TRASSA1[jj].object=ii;
-              				if(bd_osn[1]==15)
-                      {
-												ERROR_MARSH=ERROR_MARSH+ANALIZ_ST_IN_PUT(jj,kod_marsh,tums,i_n,ind_str[tums]);
+							case 7:	TRASSA1[jj].object=ii;
+//											if(bd_osn[1]==15)
+//											{
+//												ERROR_MARSH=ERROR_MARSH+ANALIZ_ST_IN_PUT(jj,kod_marsh,tums,i_n,ind_str[tums]);
+//											}
+//											if(bd_osn[1]==14)
+//											{
+//												ERROR_MARSH=ERROR_MARSH+tst_str_ohr();
+//											}
+											ii=ii+shag;
+											break;
+						 default: TRASSA1[jj].object=ii;
+											if((bd_osn[0]==3)||(bd_osn[0]==4))
+											{
+//												read_FR3(ii);
+//												if(FR3[11]!=0)ERROR_MARSH=3000+ii;//если СП или УП непарафазны
+//												if(((KOM!=191)&&(KOM!=188)&&(KOM!=71))||(bd_osn[0]==3))
+//												{
+//													if(FR3[1]!=0)ERROR_MARSH=4000+ii;//если СП или УП занят
+//												}
+//												if(FR3[3]!=0)ERROR_MARSH=5000+ii;//если СП или УП замкнут
+//												if(FR3[5]!=0)ERROR_MARSH=6000+ii;//если СП или УП в разделке
+//												if(FR3[7]!=0)ERROR_MARSH=8000+ii;//если в работе МСП
+												if(ERROR_MARSH>1000)return(ERROR_MARSH);
+
+												MARSHRUT_ALL[i_n].SP_UP[tums][ind_sp[tums]++]=ii;
 											}
-											if(bd_osn[1]==14)
-                      {
-												ERROR_MARSH=ERROR_MARSH+tst_str_ohr();
-											}
-                      ii=ii+shag;
-                      break;
-             default: TRASSA1[jj].object=ii;
-             					if((bd_osn[0]==3)||(bd_osn[0]==4))
-											MARSHRUT_ALL[i_n].SP_UP[tums][ind_sp[tums]++]=ii;
-                      if(bd_osn[0]==2)//если объект - сигнал
-                      {
+											//если объект - сигнал
+											if(bd_osn[0]==2)
+											{ //если не смена направления
+//												if(bd_osn[11]!=43690)
+//												{
+ //													read_FR3(ii);//прочитать текущее состояние сигнала
+ //													if(FR3[11]!=0)return(3000+ii);//если сигнал непарафазен
+//													if(((shag==1)&&(bd_osn[1]==0))||
+//													((shag==-1)&&(bd_osn[1]==1)))
+//													if((FR3[1]!=0)||(FR3[3]!=0))return(8000+ii); //если сигнал открыт
+//												}
 												switch(shag)
 												{ //нечетное направление
-                          case 1: switch(kod_marsh1)
-                                  { //маневровый
-                                    case 'a':
-                                    case 'd':
-                                              kod_beg=256;
+													case 1: switch(kod_marsh1)
+																	{ //маневровый
+																		case 'a':
+																		case 'd':
+																							kod_beg=256;
 																							kod_end=1;
 																							break;
-                                    //поездной
-                                    case 'b': kod_beg=4096;
-                                              kod_end=16;
-                                              break;
+																		//поездной
+																		case 'b': kod_beg=4096;
+																							kod_end=16;
+																							break;
 																		default:  ERROR_MARSH=1010;break;
 
-                                  }
-                                  break;
-                          //четное направление
-                          case -1:  switch(kod_marsh1)
-                                    { //маневровый
-                                      case 'a':
-                                      case 'd':
-                                                kod_beg=1024;
-                                                kod_end=4;
+																	}
+																	break;
+													//четное направление
+													case -1:  switch(kod_marsh1)
+																		{ //маневровый
+																			case 'a':
+																			case 'd':
+																								kod_beg=1024;
+																								kod_end=4;
 																								break;
-                                      //поездной
-                                      case 'b': kod_beg=16384;
-                                                kod_end=64;
-                                                break;
+																			//поездной
+																			case 'b': kod_beg=16384;
+																								kod_end=64;
+																								break;
 																			default:  ERROR_MARSH=1010;break;
-                                    }
-                                    break;
+																		}
+																		break;
 													 default: ERROR_MARSH=1010;break;
-                        }
+												}
 												if(ERROR_MARSH>1000)break;
 												if((bd_osn[11]&kod_beg)==kod_beg)//если есть такое начало
 												{
-                        	TRASSA1[jj].object=TRASSA1[jj].object|0x8000;
+													TRASSA1[jj].object=TRASSA1[jj].object|0x8000;
 													MARSHRUT_ALL[i_n].SIG[tums][ind_sig[tums]++]=ii;
-                        }
-                        if((bd_osn[11]&kod_end)==kod_end)//если есть такой конец
-                        TRASSA1[jj].object=TRASSA1[jj].object|0x4000;
-                         //если у сигнала есть поездное показание
+												}
+												if((bd_osn[11]&kod_end)==kod_end)//если есть такой конец
+												TRASSA1[jj].object=TRASSA1[jj].object|0x4000;
+												 //если у сигнала есть поездное показание
 												if(bd_osn[6]!=0)
-                        TRASSA1[jj].object=TRASSA1[jj].object|0x2000;
-                                        //взять код подгруппы
-                        TRASSA1[jj].podgrup=bd_osn[15]&0x00ff;
-                        //взять код битовой команды
-                        TRASSA1[jj].kod_bit=(((bd_osn[15]&0xe000)>>13)-1)|0x40;
+												TRASSA1[jj].object=TRASSA1[jj].object|0x2000;
+																				//взять код подгруппы
+												TRASSA1[jj].podgrup=bd_osn[15]&0x00ff;
+												//взять код битовой команды
+												TRASSA1[jj].kod_bit=(((bd_osn[15]&0xe000)>>13)-1)|0x40;
 												if((PROHOD1==1)&&((bd_osn[11]&kod_end)==kod_end))
-                        {
+												{
 													if((bd_osn[1]==0)&&(shag==-1))return(ERROR_MARSH);
 													if((bd_osn[1]==1)&&(shag==1))return(ERROR_MARSH);
-                        }
-                      }
-                      ii=ii+shag;
-                      break;
-            }
+												}
+											}
+											ii=ii+shag;
+											break;
+						}//конец переключателя по типу объекта базы
 						if(ERROR_MARSH>1000)break;
 						stroka_pred=stroka_tek;
 						if(tek_strel>Nstrel){ERROR_MARSH=1006;break;} //$$$$$$######
@@ -1852,18 +2078,18 @@ R2:
 								{
 									if((bd_osn[1]==0)&&(shag==-1))return(ERROR_MARSH);
 									if((bd_osn[1]==1)&&(shag==1))return(ERROR_MARSH);
-                }
-              }
-              break;
-            }
-            jj++;
+								}
+							}
+							break;
+						}
+						jj++;
 						if(ERROR_MARSH>1000)break;
-            if(jj>=200)break;
-          }
-					if(ERROR_MARSH!=0)ZERO_TRASSA1();
-    }
+						if(jj>=200)break;
+					}
+					if(ERROR_MARSH>1000)ZERO_TRASSA1();
+		}
 		return(ERROR_MARSH);
-  }
+	}
 	return(ERROR_MARSH);
 }
 //=============================================================================
@@ -1943,20 +2169,19 @@ void TUMS_MARSH(int i_m	)
 						{
 							MARSHRUT_ALL[i_m].SOST=0x83; //маршрут исполнительный
 						}
-						for(s_m=0;s_m<3;s_m++) //пройти по трем строчкам локальной таблицы
+						for(s_m=0;s_m<MARS_STOY;s_m++) //пройти по строчкам локальной таблицы
 						//если маршрут в работе - прервать
 						if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m)break;
 
-						if(s_m>=3)//если этот маршрут не в работе
+						if(s_m>=MARS_STOY)//если этот маршрут не в работе
 							//найти свободное место
-							for(s_m=0;s_m<3;s_m++)
+							for(s_m=0;s_m<MARS_STOY;s_m++)
 							if(MARSHRUT_ST[i_s][s_m].NUM==0)break; //если чисто - прервать
 
-						if(s_m>=3)//если нет свободной структуры для локального задания
-						{
-							if(perevod_str!=0)goto NEXT;
-							else goto out;
-						}
+						//если нет свободной структуры для локального задания - завершить
+
+						if(s_m>=MARS_STOY)goto out;
+
 						//если строка свободна - начинаем писать команду
 						MARSHRUT_ST[i_s][s_m].NEXT_KOM[0]='(';
 						//сформировать адрес
@@ -2012,6 +2237,7 @@ void TUMS_MARSH(int i_m	)
 						MARSHRUT_ST[i_s][s_m].NEXT_KOM[10]=0;
 						//закрываем пакет команды
 						MARSHRUT_ST[i_s][s_m].NEXT_KOM[11]=')';
+						KOL_VYD_MARSH[i_s]==0;				//$$$$ 13_04_07 сброс счетчика числа повторов выдачи маршрута
 						add(i_s,6666,s_m);
 
 						//устанавливаем состояние локального маршрута
@@ -2036,286 +2262,292 @@ NEXT:
 							if(TRASSA[jj].tip==7)
 							{
 								READ_BD(objk_next);
+								//если ДЗ для стрелки в пути и поездной маршрут
 								if((bd_osn[0]==7)&&(bd_osn[1]==15)&&((kmnd=='b')||(kmnd=='j')))
 								{
-									sp_in_put=bd_osn[3];
-									spar_sp=bd_osn[5];
-									read_FR3(sp_in_put);
-									FR3[12]=0;FR3[13]=1;
-									write_FR3(sp_in_put);
-									obnovi(sp_in_put);
-									if(spar_sp!=0)
+									sp_in_put=bd_osn[3]; //получаем объект для СП стрелки в пути
+									spar_sp=bd_osn[5]; //получаем СП для спаренной стрелки
+									read_FR3(sp_in_put);//читаем состояние СП стрелки в пути
+									FR3[12]=0;FR3[13]=1;//включаем предварительное замыкание СП
+									write_FR3(sp_in_put); //записываем замыкание в общий массив
+									obnovi(sp_in_put); //добавляем к новизне СП
+									if(spar_sp!=0)//если есть спаренная стрелка со своим СП
 									{
-										read_FR3(spar_sp);
-										FR3[12]=0;FR3[13]=1;
-										obnovi(spar_sp);
+										read_FR3(spar_sp);//получаем состояние СП парной стрелки
+										FR3[12]=0;FR3[13]=1; //включаем пред.замыкание
+										obnovi(spar_sp); //добавляем к новизне
+										write_FR3(spar_sp);
 									}
 								}
+								read_FR3(objk);//читаем состояние объекта ДЗ
+								FR3[20]=FR3[20]|(objk_next/256);
+								FR3[21]=objk_next%256;//записываем следующий объект трассы
+								//сохранить измененные массивы на виртуальном диске
+								write_FR3(objk);
+							}
+							else//если не ДЗ
+							if((TRASSA[jj].tip>=3)&&(TRASSA[jj].tip<=5))//если СП,УП,путь
+							{
+								if(nachalo)//если есть начало
+								{
+									//если объект СП или УП
+									if((TRASSA[jj].tip==3)||(TRASSA[jj].tip==4))
+									{
+										read_FR3(objk);
+										FR3[24]=nachalo/256; //запомнить номер сигнала
+										FR3[25]=nachalo%256; //начала маршрута
+										write_FR3(objk);
+										nachalo=0;
+									}
+								}
+								if((objk>=KOL_VO)||(objk<=0))return;
+								read_FR3(objk);
+
+								//установить признаки замыкания
+								FR3[12]=0;
+								FR3[13]=1;
+								FR3[20]=FR3[20]|(objk_next/256);
+								FR3[21]=objk_next%256;
+								obnovi(objk);
+								write_FR3(objk);
+								//если это путь или УП
+								if((TRASSA[jj].tip==5)||(TRASSA[jj].tip==4))
+								{
+									READ_BD(objk);//прочитать объект
+									if(bd_osn[1]!=0) //если по этому объекту деление ТУМС
+									{
+										sosed=bd_osn[1]; //получить объект соседа
+										read_FR3(sosed);
+										FR3[12]=0;       //выполнить его замыкание
+										FR3[13]=1;
+										write_FR3(sosed);
+										obnovi(sosed);
+
+									}
+								}
+							}
+							else
+							if((TRASSA[jj].tip==2)&&(objk!=END)) //если сигнал
+							{
+								if((TRASSA[jj].object&0x8000)==0x8000)//если это начало
+								{
+									if((objk>=KOL_VO)||(objk<=0))return;
+									nachalo=objk;
+									read_FR3(objk);
+									if(kmnd=='a') //если маневровый маршрут
+									{
+										FR3[12]=0;FR3[13]=1; //маневровое начало зафиксировать
+									}
+									if(kmnd=='b')  //если поездной маршрут
+									{
+										if((TRASSA[jj].object&0x2000)==0x2000) //есть поездное
+										{
+											FR3[14]=0;FR3[15]=1; //поездное начало зафиксировать
+										}
+									}
+
+									FR3[20]=FR3[20]|(objk_next/256);
+
+									if((s_m<MARS_STOY)&&(objk_next)&&(MARSHRUT_ST[i_s][s_m].NEXT_KOM[3]))
+									//если есть маневровое или поездное начало, то выставить флаг
+									if(FR3[13]||FR3[15])FR3[20]=FR3[20]|0x80;
+									FR3[21]=objk_next%256;
+									obnovi(objk);
+									write_FR3(objk);
+								}
+								else //если на сигнале начала нет
+								{
+									if((objk>=KOL_VO)||(objk<=0))return;
+									read_FR3(objk);
+									FR3[20]=FR3[20]|(objk_next/256);
+									FR3[21]=objk_next%256;
+									//сохранить измененные массивы на виртуальном диске
+									write_FR3(objk);
+								}
+							}
+							else
+							{
+							if((objk>=KOL_VO)||(objk<=0))return;
 								read_FR3(objk);
 								FR3[20]=FR3[20]|(objk_next/256);
 								FR3[21]=objk_next%256;
 								//сохранить измененные массивы на виртуальном диске
 								write_FR3(objk);
 							}
-              else
-              if((TRASSA[jj].tip>=3)&&(TRASSA[jj].tip<=5))//если СП,УП,путь
-              {
-                if(nachalo)
-                {
-                	if((TRASSA[jj].tip==3)||(TRASSA[jj].tip==4))
-                  {
-                  	read_FR3(objk);
-                    FR3[24]=nachalo/256;
-                    FR3[25]=nachalo%256;
-                    write_FR3(objk);
-                    nachalo=0;
-									}
-								}
-                if(objk>=KOL_VO)return;
-								read_FR3(objk);
-
-                //установить признаки замыкания
-                FR3[12]=0;
-								FR3[13]=1;
-                FR3[20]=FR3[20]|(objk_next/256);
-                FR3[21]=objk_next%256;
-                obnovi(objk);
-								write_FR3(objk);
-                if((TRASSA[jj].tip==5)||(TRASSA[jj].tip==4)) //если это путь or UP
-                {
-                	READ_BD(objk);
-                  if(bd_osn[1]!=0)
-                  {
-										sosed=bd_osn[1];
-                    read_FR3(sosed);
-                    FR3[12]=0;
-                    FR3[13]=1;
-                    write_FR3(sosed);
-                    obnovi(sosed);
-                    
-									}
-								}
-              }
-              else
-              if((TRASSA[jj].tip==2)&&(objk!=END)) //если сигнал
-              {
-                if((TRASSA[jj].object&0x8000)==0x8000)//если это начало
-                {
-                  if(objk>=KOL_VO)return;
-                  nachalo=objk;
-                  read_FR3(objk);
-                  if(kmnd=='a') //если маневровый маршрут
-                  {
-                    FR3[12]=0;FR3[13]=1;
-									}
-                  if(kmnd=='b')  //если поездной маршрут
-                  {
-                    if((TRASSA[jj].object&0x2000)==0x2000) //есть поездное
-										{
-                      FR3[14]=0;FR3[15]=1;
-                    }
-                  }
-
-                  FR3[20]=FR3[20]|(objk_next/256);
-									if((s_m<3)&&(objk_next)&&(MARSHRUT_ST[i_s][s_m].NEXT_KOM[3]))
-                  if(FR3[13]||FR3[15])FR3[20]=FR3[20]|0x80;
-                  FR3[21]=objk_next%256;
-                  obnovi(objk);
-									write_FR3(objk);
-                }
-                else //если на сигнале начала нет
-                {
-                  if(objk>=KOL_VO)return;
-                  read_FR3(objk);
-                  FR3[20]=FR3[20]|(objk_next/256);
-                  FR3[21]=objk_next%256;
-                  //сохранить измененные массивы на виртуальном диске
-                  write_FR3(objk);
-                }
-              }
-              else
-              {
-                if(objk>=KOL_VO)return;
-                read_FR3(objk);
-                FR3[20]=FR3[20]|(objk_next/256);
-                FR3[21]=objk_next%256;
-                //сохранить измененные массивы на виртуальном диске
-                write_FR3(objk);
-              }
 						}//конец прохода на замыкание
 						add(tums_pred-1,9999,0);
-
-						if((REGIM==COMMAND)&&(ACTIV==0))
+						if((REGIM==COMMAND)&&(ACTIV==0)
+						)
 						{
 							putch1(0x10,0xc,1,Y_KOM);
 							if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1);
-							else putch1(' ',0xc,1,47);
+							else putch1(' ',0xc,1,46);
 							puts1(KOMANDA_TUMS[tums_pred-1],0xa,55,Y_KOM);
 							Y_KOM++;
-							if(Y_KOM>=48)Y_KOM=3;
+							if(Y_KOM>=47)Y_KOM=3;
 							puts1("                                   ",0xa,3,Y_KOM);
 						}
 						first_beg=-1;
-            last_end=-1;
-          }
-          else//если нет начала или конца
-          {
-            if(last_end==first_beg)first_beg=-1;
-            if(last_end==-1)first_beg=-1;
-          }
-        }
-        tums_pred=tums_tek; //совместить стойки
+						last_end=-1;
+					}
+					else//если нет начала или конца
+					{
+						if(last_end==first_beg)first_beg=-1;
+						if(last_end==-1)first_beg=-1;
+					}
+				}
+				tums_pred=tums_tek; //совместить стойки
 
-        if((TRASSA[ii].object&0x8000)==0x8000)//если сигнал может быть началом
-        {
+				if((TRASSA[ii].object&0x8000)==0x8000)//если сигнал может быть началом
+				{
 					if(first_beg)//если устанавливается команда на перевод стрелок
-          {
-            if(first_beg==-1)first_beg=ii;
-          }
+					{
+						if(first_beg==-1)first_beg=ii;
+					}
 					else //если устанавливается команда на открытие сигнала
-          {
-            if(kmnd=='b') //поездной
-            {
+					{
+						if(kmnd=='b') //поездной
+						{
 							if((TRASSA[ii].object&0x2000)==0x2000) //есть поездное
-              {
-                if(first_beg==-1)first_beg=ii; //если не было начала - взять
-              }
-              else//если нет поездного показания
-                if(first_beg==-1)first_beg=0x8000|ii;//псевдоначало
+							{
+								if(first_beg==-1)first_beg=ii; //если не было начала - взять
+							}
+							else//если нет поездного показания
+								if(first_beg==-1)first_beg=0x8000|ii;//псевдоначало
 						}
-            else if(first_beg==-1)first_beg=ii;//для маневрового всегда начало
-          }
-        }//конец анализа сигнала для начала
+						else if(first_beg==-1)first_beg=ii;//для маневрового всегда начало
+					}
+				}//конец анализа сигнала для начала
 
-        if((TRASSA[ii].object&0x4000)==0x4000)//если сигнал может быть концом
-        {
-          if(first_beg!=-1)last_end=ii; //если было начало, то взять конец
-        }
+				if((TRASSA[ii].object&0x4000)==0x4000)//если сигнал может быть концом
+				{
+					if(first_beg!=-1)last_end=ii; //если было начало, то взять конец
+				}
 
-        if((TRASSA[ii].object&0xC000)==0)//если сигнал никакой
-        {
-          objk=TRASSA[ii].object&0xfff;
-          objk_next=TRASSA[ii+1].object&0xfff;
-          if(objk>=KOL_VO)return;
-          read_FR3(objk);
-          FR3[20]=FR3[20]|(objk_next/256);
-          FR3[21]=objk_next%256;
-          //сохранить измененные массивы на виртуальном диске
-          write_FR3(objk);
-        }
+				if((TRASSA[ii].object&0xC000)==0)//если сигнал никакой
+				{
+					objk=TRASSA[ii].object&0xfff;
+					objk_next=TRASSA[ii+1].object&0xfff;
+					if(objk<=0)return;
+					if(objk>=KOL_VO)return;
+					read_FR3(objk);
+					FR3[20]=FR3[20]|(objk_next/256);
+					FR3[21]=objk_next%256;
+					//сохранить измененные массивы на виртуальном диске
+					write_FR3(objk);
+				}
 			}
-      if((TRASSA[ii].tip==0)&&(TRASSA[ii].object==0))break;
-      ii++;//идти далее
-      //далее вставка для участка пути 2ЧГП
+			if((TRASSA[ii].tip==0)&&(TRASSA[ii].object==0))break;
+			ii++;//идти далее
+			//далее вставка для участка пути 2ЧГП
 			if(TRASSA[ii].tip==4)//если УП
-      {
-        objk=TRASSA[ii].object&0xfff;
-        objk_next=TRASSA[ii+1].object&0xfff;
-				if(objk>=KOL_VO)return;
-        read_FR3(objk);
-        //установить признаки замыкания
-        FR3[12]=0;
-        FR3[13]=1;
-        FR3[20]=FR3[20]|(objk_next/256);
+			{
+				objk=TRASSA[ii].object&0xfff;
+				objk_next=TRASSA[ii+1].object&0xfff;
+				if((objk>=KOL_VO)||(objk<=0))return;
+				read_FR3(objk);
+				//установить признаки замыкания
+				FR3[12]=0;
+				FR3[13]=1;
+				FR3[20]=FR3[20]|(objk_next/256);
 				FR3[21]=objk_next%256;
-        obnovi(objk);
-        write_FR3(objk);
-      }
-      if(TRASSA[ii].tip==6)//если переход
-      {
-        objk=TRASSA[ii].object&0xfff;
-        objk_next=TRASSA[ii+1].object&0xfff;
-        if(objk>=KOL_VO)return;
-        read_FR3(objk);
-        FR3[20]=FR3[20]|(objk_next/256);
-        FR3[21]=objk_next%256;
-        //сохранить измененные массивы на виртуальном диске
-        write_FR3(objk);
-      }
-    }
+				obnovi(objk);
+				write_FR3(objk);
+			}
+			if(TRASSA[ii].tip==6)//если переход
+			{
+				objk=TRASSA[ii].object&0xfff;
+				objk_next=TRASSA[ii+1].object&0xfff;
+				if((objk>=KOL_VO)||(objk<=0))return;
+				read_FR3(objk);
+				FR3[20]=FR3[20]|(objk_next/256);
+				FR3[21]=objk_next%256;
+				//сохранить измененные массивы на виртуальном диске
+				write_FR3(objk);
+			}
+		}
 out:
 		ZERO_TRASSA();
-  }
-  if(TRASSA1[0].object)
-  {
+	}
+	if(TRASSA1[0].object)
+	{
 		if(MARSHRUT_ALL[i_m].NACH!=(TRASSA1[0].object&0xFFF))
-  	{
-  		ZERO_TRASSA1();
-      return;
+		{
+			ZERO_TRASSA1();
+			return;
 		}
-    else
-    {
+		else
+		{
 			kmnd=MARSHRUT_ALL[i_m].KMND;
 			END=MARSHRUT_ALL[i_m].END;
 		}
-   	ii=0;
-    last_end=-1,first_beg=-1;//установить начало поиска
+		ii=0;
+		last_end=-1,first_beg=-1;//установить начало поиска
 
-    tums_pred=TRASSA1[0].stoyka;
+		tums_pred=TRASSA1[0].stoyka;
 		tums_tek=tums_pred;            //взять ТУМС
 
 		for(i_s=0;i_s<Nst;i_s++)test=test+MARSHRUT_ALL[i_m].KOL_STR[i_s];
 
-    if(test==0)perevod_str=0;
-    else perevod_str=0xf;
+		if(test==0)perevod_str=0;
+		else perevod_str=0xf;
 
-    while(ii<200)//проход по всей трассе
-    {
-      //если сигнал или конец данных
-      if((TRASSA1[ii].tip==2)||(TRASSA1[ii].tip==0))
-      {
-        tums_tek=TRASSA1[ii].stoyka;
-        if(tums_tek!=tums_pred)//переход в другую стойку
-        {
-          if((first_beg&0x8000)==0x8000)//если реального начала нет
-          {
-            last_end=-1;first_beg=-1;tums_tek=tums_pred; //сброс начала и конца
-          }
-        }
+		while(ii<200)//проход по всей трассе
+		{
+			//если сигнал или конец данных
+			if((TRASSA1[ii].tip==2)||(TRASSA1[ii].tip==0))
+			{
+				tums_tek=TRASSA1[ii].stoyka;
+				if(tums_tek!=tums_pred)//переход в другую стойку
+				{
+					if((first_beg&0x8000)==0x8000)//если реального начала нет
+					{
+						last_end=-1;first_beg=-1;tums_tek=tums_pred; //сброс начала и конца
+					}
+				}
 
 				if(tums_tek!=tums_pred)//переход в другую стойку
-        {
-          //если есть реальное начало
-          if((last_end!=-1)&&(first_beg!=last_end))//если есть конец и начало
+				{
+					//если есть реальное начало
+					if((last_end!=-1)&&(first_beg!=last_end))//если есть конец и начало
 					{
-            i_s=tums_pred-1;
+						i_s=tums_pred-1;
 						MARSHRUT_ALL[i_m].STOYKA[i_s]=1;//фиксируем вхождение стойки в маршрут
 
 						if(perevod_str!=0) //если маршрут требует перевода стрелок
-            {
+						{
 							MARSHRUT_ALL[i_m].SOST=0x43;// маршрут предварительный
 							if(MARSHRUT_ALL[i_m].KOL_STR[i_s]!=0) //если в этой стойке перевод
-              {
+							{
 								MARSHRUT_ALL[i_m].STOYKA[i_s]=2; //фиксируем вхождение с переводом
 							}
-              else goto NEXT1;
+							else goto NEXT1;
 						}
-            else //если стрелки стоят по маршруту
-            {
+						else //если стрелки стоят по маршруту
+						{
 							MARSHRUT_ALL[i_m].SOST=0x83; //маршрут исполнительный
 						}
-						for(s_m=0;s_m<3;s_m++)if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m)break;
-            if(s_m>=3)//если этот маршрут не в работе
-							for(s_m=0;s_m<3;s_m++)if(MARSHRUT_ST[i_s][s_m].NUM==0)break;
-            if(s_m>=3)//если нет свободной структуры для локального задания
-            {
-							if(perevod_str!=0)goto NEXT1;
-							else goto out1;
-						}
+						for(s_m=0;s_m<MARS_STOY;s_m++)if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m)break;
+
+						if(s_m>=MARS_STOY)//если этот маршрут не в работе
+							for(s_m=0;s_m<MARS_STOY;s_m++)if(MARSHRUT_ST[i_s][s_m].NUM==0)break;
+
+						//если нет свободной структуры для локального задания
+						if(s_m>=MARS_STOY)goto out1;
 
 						MARSHRUT_ST[i_s][s_m].NEXT_KOM[0]='(';
-            //сформировать адрес
-            switch(tums_pred)
-            {
-              case 1: adr_kom='G';break;
+						//сформировать адрес
+						switch(tums_pred)
+						{
+							case 1: adr_kom='G';break;
 							case 2: adr_kom='K';break;
-              case 3: adr_kom='M';break;
-              case 4: adr_kom='N';break;
-              case 5: adr_kom='S';break;
+							case 3: adr_kom='M';break;
+							case 4: adr_kom='N';break;
+							case 5: adr_kom='S';break;
 							case 6: adr_kom='U';break;
-              case 7: adr_kom='V';break;
-              case 8: adr_kom='Y';break;
-              default:return;
+							case 7: adr_kom='V';break;
+							case 8: adr_kom='Y';break;
+							default:return;
 						}
 						MARSHRUT_ST[i_s][s_m].NEXT_KOM[1]=adr_kom;
 						if(perevod_str==0)MARSHRUT_ST[i_s][s_m].NEXT_KOM[2]=kmnd;
@@ -2345,9 +2577,6 @@ out:
 							}
 						}
 						MARSHRUT_ST[i_s][s_m].NEXT_KOM[7]=0x40|n_strel;
-						MARSHRUT_ST[i_s][s_m].NEXT_KOM[8]=0x40|(pol_strel&0x3f);
-						MARSHRUT_ST[i_s][s_m].NEXT_KOM[9]=0x40|((pol_strel&0xFC0)>>6);
-
 						//заполняем положение для первых 6 стрелок
 						MARSHRUT_ST[i_s][s_m].NEXT_KOM[8]=0x40|(pol_strel&0x3f);
 						//заполняем положение для вторых 6 стрелок
@@ -2361,22 +2590,22 @@ out:
 						MARSHRUT_ST[i_s][s_m].NUM=i_m+100;
 
 						if(MARSHRUT_ST[i_s][s_m].NEXT_KOM[3]==0)fiktiv=0xf;
-            else fiktiv=0;
+						else fiktiv=0;
 
 NEXT1:
-            for(jj=first_beg;jj<=(last_end+1);jj++)
-            { if(fiktiv==0)objk=TRASSA1[jj].object&0xfff;
-              else fiktiv=0;
+						for(jj=first_beg;jj<=(last_end+1);jj++)
+						{ if(fiktiv==0)objk=TRASSA1[jj].object&0xfff;
+							else fiktiv=0;
 
-              if(objk==0)break;
+							if(objk==0)break;
 
-              objk_next=TRASSA1[jj+1].object&0xfff;
+							objk_next=TRASSA1[jj+1].object&0xfff;
 
-              if(TRASSA1[jj].tip==7)
-              {
+							if(TRASSA1[jj].tip==7)
+							{
 								READ_BD(objk_next);
-                if((bd_osn[0]==7)&&(bd_osn[1]==15)&&((kmnd=='b')||(kmnd=='j')))
-                {
+								if((bd_osn[0]==7)&&(bd_osn[1]==15)&&((kmnd=='b')||(kmnd=='j')))
+								{
 									sp_in_put=bd_osn[3];
 									spar_sp=bd_osn[5];
 									read_FR3(sp_in_put);
@@ -2387,6 +2616,7 @@ NEXT1:
 									{
 										read_FR3(spar_sp);
 										FR3[12]=0;FR3[13]=1;
+										write_FR3(spar_sp);
 										obnovi(spar_sp);
 									}
 								}
@@ -2399,88 +2629,88 @@ NEXT1:
 							else
 							if((TRASSA1[jj].tip>=3)&&(TRASSA1[jj].tip<=5))//если СП,УП,путь
 							{
-                if(nachalo)
-                {
-                	if((TRASSA1[jj].tip==3)||(TRASSA1[jj].tip==4))
-                  {
-                  	read_FR3(objk);
-                    FR3[24]=nachalo/256;
-                    FR3[25]=nachalo%256;
-                    write_FR3(objk);
-                    nachalo=0;
-									}
-								}
-                if(objk>=KOL_VO)return;
-                read_FR3(objk);
-
-                //установить признаки замыкания
-								FR3[12]=0;
-                FR3[13]=1;
-                FR3[20]=FR3[20]|(objk_next/256);
-                FR3[21]=objk_next%256;
-                obnovi(objk);
-                write_FR3(objk);
-                if((TRASSA1[jj].tip==5)||(TRASSA1[jj].tip==4)) //если это путь or UP
-                {
-                	READ_BD(objk);
-                  if(bd_osn[1]!=0)
+								if(nachalo)
+								{
+									if((TRASSA1[jj].tip==3)||(TRASSA1[jj].tip==4))
 									{
-                  	sosed=bd_osn[1];
-                    read_FR3(sosed);
-                    FR3[12]=0;
-                    FR3[13]=1;
-                    write_FR3(sosed);
-                    obnovi(sosed);
+										read_FR3(objk);
+										FR3[24]=nachalo/256;
+										FR3[25]=nachalo%256;
+										write_FR3(objk);
+										nachalo=0;
 									}
 								}
-              }
-              else
-              if((TRASSA1[jj].tip==2)&&(objk!=END)) //если сигнал
-              {
-                if((TRASSA1[jj].object&0x8000)==0x8000)//если это начало
-                {
-                  if(objk>=KOL_VO)return;
-                  nachalo=objk;
-                  read_FR3(objk);
-                  if(kmnd=='a') //если маневровый маршрут
-                  {
-                    FR3[12]=0;FR3[13]=1;
-                  }
-                  if(kmnd=='b')  //если поездной маршрут
-                  {
-                    if((TRASSA1[jj].object&0x2000)==0x2000) //есть поездное
-										{
-                      FR3[14]=0;FR3[15]=1;
-                    }
-                  }
+								if((objk>=KOL_VO)||(objk<=0))return;
+								read_FR3(objk);
 
-                  FR3[20]=FR3[20]|(objk_next/256);
-                  if((s_m<3)&&(objk_next)&&(MARSHRUT_ST[i_s][s_m].NEXT_KOM[3]))
-                  if(FR3[13]||FR3[15])FR3[20]=FR3[20]|0x80;
-                  FR3[21]=objk_next%256;
-                  obnovi(objk);
+								//установить признаки замыкания
+								FR3[12]=0;
+								FR3[13]=1;
+								FR3[20]=FR3[20]|(objk_next/256);
+								FR3[21]=objk_next%256;
+								obnovi(objk);
+								write_FR3(objk);
+								if((TRASSA1[jj].tip==5)||(TRASSA1[jj].tip==4)) //если это путь or UP
+								{
+									READ_BD(objk);
+									if(bd_osn[1]!=0)
+									{
+										sosed=bd_osn[1];
+										read_FR3(sosed);
+										FR3[12]=0;
+										FR3[13]=1;
+										write_FR3(sosed);
+										obnovi(sosed);
+									}
+								}
+							}
+							else
+							if((TRASSA1[jj].tip==2)&&(objk!=END)) //если сигнал
+							{
+								if((TRASSA1[jj].object&0x8000)==0x8000)//если это начало
+								{
+									if((objk>=KOL_VO)||(objk<=0))return;
+									nachalo=objk;
+									read_FR3(objk);
+									if(kmnd=='a') //если маневровый маршрут
+									{
+										FR3[12]=0;FR3[13]=1;
+									}
+									if(kmnd=='b')  //если поездной маршрут
+									{
+										if((TRASSA1[jj].object&0x2000)==0x2000) //есть поездное
+										{
+											FR3[14]=0;FR3[15]=1;
+										}
+									}
+
+									FR3[20]=FR3[20]|(objk_next/256);
+									if((s_m<MARS_STOY)&&(objk_next)&&(MARSHRUT_ST[i_s][s_m].NEXT_KOM[3]))
+									if(FR3[13]||FR3[15])FR3[20]=FR3[20]|0x80;
+									FR3[21]=objk_next%256;
+									obnovi(objk);
 									write_FR3(objk);
-                }
-                else //если на сигнале начала нет
-                {
-                  if(objk>=KOL_VO)return;
-                  read_FR3(objk);
-                  FR3[20]=FR3[20]|(objk_next/256);
-                  FR3[21]=objk_next%256;
-                  //сохранить измененные массивы на виртуальном диске
-                  write_FR3(objk);
-                }
-              }
-              else
-              {
-                if(objk>=KOL_VO)return;
-                read_FR3(objk);
-                FR3[20]=FR3[20]|(objk_next/256);
-                FR3[21]=objk_next%256;
-                //сохранить измененные массивы на виртуальном диске
-                write_FR3(objk);
-              }
-            }//конец прохода на замыкание
+								}
+								else //если на сигнале начала нет
+								{
+									if((objk>=KOL_VO)||(objk<=0))return;
+									read_FR3(objk);
+									FR3[20]=FR3[20]|(objk_next/256);
+									FR3[21]=objk_next%256;
+									//сохранить измененные массивы на виртуальном диске
+									write_FR3(objk);
+								}
+							}
+							else
+							{
+								if((objk>=KOL_VO)||(objk<=0))return;
+								read_FR3(objk);
+								FR3[20]=FR3[20]|(objk_next/256);
+								FR3[21]=objk_next%256;
+								//сохранить измененные массивы на виртуальном диске
+								write_FR3(objk);
+							}
+						}//конец прохода на замыкание
 
 						add(tums_pred-1,9999,0);
 
@@ -2488,93 +2718,93 @@ NEXT1:
 						{
 							putch1(0x10,0xc,1,Y_KOM);
 							if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1);
-							else putch1(' ',0xc,1,47);
+							else putch1(' ',0xc,1,46);
 							puts1(KOMANDA_TUMS[tums_pred-1],0xa,55,Y_KOM);
 							Y_KOM++;
-							if(Y_KOM>=48)Y_KOM=3;
+							if(Y_KOM>=47)Y_KOM=3;
 							puts1("                                   ",0xa,3,Y_KOM);
 						}
 						first_beg=-1;
-            last_end=-1;
-          }
-          else//если нет начала или конца
-          {
-            if(last_end==first_beg)first_beg=-1;
-            if(last_end==-1)first_beg=-1;
-          }
-        }
-        tums_pred=tums_tek; //совместить стойки
-
-        if((TRASSA1[ii].object&0x8000)==0x8000)//если сигнал может быть началом
-        {
-          if(first_beg)//если устанавливается команда на перевод стрелок
-					{
-            if(first_beg==-1)first_beg=ii;
+						last_end=-1;
 					}
-          else //если устанавливается команда на открытие сигнала
-          {
-            if(kmnd=='b') //поездной
-            {
-              if((TRASSA1[ii].object&0x2000)==0x2000) //есть поездное
-              {
-                if(first_beg==-1)first_beg=ii; //если не было начала - взять
-              }
-              else//если нет поездного показания
-                if(first_beg==-1)first_beg=0x8000|ii;//псевдоначало
-            }
-            else if(first_beg==-1)first_beg=ii;//для маневрового всегда начало
-          }
-        }//конец анализа сигнала для начала
+					else//если нет начала или конца
+					{
+						if(last_end==first_beg)first_beg=-1;
+						if(last_end==-1)first_beg=-1;
+					}
+				}
+				tums_pred=tums_tek; //совместить стойки
 
-        if((TRASSA1[ii].object&0x4000)==0x4000)//если сигнал может быть концом
-        {
-          if(first_beg!=-1)last_end=ii; //если было начало, то взять конец
-        }
+				if((TRASSA1[ii].object&0x8000)==0x8000)//если сигнал может быть началом
+				{
+					if(first_beg)//если устанавливается команда на перевод стрелок
+					{
+						if(first_beg==-1)first_beg=ii;
+					}
+					else //если устанавливается команда на открытие сигнала
+					{
+						if(kmnd=='b') //поездной
+						{
+							if((TRASSA1[ii].object&0x2000)==0x2000) //есть поездное
+							{
+								if(first_beg==-1)first_beg=ii; //если не было начала - взять
+							}
+							else//если нет поездного показания
+								if(first_beg==-1)first_beg=0x8000|ii;//псевдоначало
+						}
+						else if(first_beg==-1)first_beg=ii;//для маневрового всегда начало
+					}
+				}//конец анализа сигнала для начала
 
-        if((TRASSA1[ii].object&0xC000)==0)//если сигнал никакой
-        {
-          objk=TRASSA1[ii].object&0xfff;
-          objk_next=TRASSA1[ii+1].object&0xfff;
-          if(objk>=KOL_VO)return;
-          read_FR3(objk);
-          FR3[20]=FR3[20]|(objk_next/256);
-          FR3[21]=objk_next%256;
-          //сохранить измененные массивы на виртуальном диске
-          write_FR3(objk);
-        }
-      }
+				if((TRASSA1[ii].object&0x4000)==0x4000)//если сигнал может быть концом
+				{
+					if(first_beg!=-1)last_end=ii; //если было начало, то взять конец
+				}
+
+				if((TRASSA1[ii].object&0xC000)==0)//если сигнал никакой
+				{
+					objk=TRASSA1[ii].object&0xfff;
+					objk_next=TRASSA1[ii+1].object&0xfff;
+					if((objk>=KOL_VO)||(objk<=0))return;
+					read_FR3(objk);
+					FR3[20]=FR3[20]|(objk_next/256);
+					FR3[21]=objk_next%256;
+					//сохранить измененные массивы на виртуальном диске
+					write_FR3(objk);
+				}
+			}
 			if((TRASSA1[ii].tip==0)&&(TRASSA1[ii].object==0))break;
-      ii++;//идти далее
+			ii++;//идти далее
 			//далее вставка для участка пути 2ЧГП
-      if(TRASSA1[ii].tip==4)//если УП
-      {
-        objk=TRASSA1[ii].object&0xfff;
-        objk_next=TRASSA1[ii+1].object&0xfff;
-        if(objk>=KOL_VO)return;
-        read_FR3(objk);
-        //установить признаки замыкания
-        FR3[12]=0;
-        FR3[13]=1;
-        FR3[20]=FR3[20]|(objk_next/256);
-        FR3[21]=objk_next%256;
-        obnovi(objk);
-        write_FR3(objk);
-      }
-      if(TRASSA1[ii].tip==6)//если переход
-      {
-        objk=TRASSA1[ii].object&0xfff;
-        objk_next=TRASSA1[ii+1].object&0xfff;
-        if(objk>=KOL_VO)return;
-        read_FR3(objk);
-        FR3[20]=FR3[20]|(objk_next/256);
-        FR3[21]=objk_next%256;
-        //сохранить измененные массивы на виртуальном диске
-        write_FR3(objk);
-      }
-    }
+			if(TRASSA1[ii].tip==4)//если УП
+			{
+				objk=TRASSA1[ii].object&0xfff;
+				objk_next=TRASSA1[ii+1].object&0xfff;
+				if((objk>=KOL_VO)||(objk<=0))return;
+				read_FR3(objk);
+				//установить признаки замыкания
+				FR3[12]=0;
+				FR3[13]=1;
+				FR3[20]=FR3[20]|(objk_next/256);
+				FR3[21]=objk_next%256;
+				obnovi(objk);
+				write_FR3(objk);
+			}
+			if(TRASSA1[ii].tip==6)//если переход
+			{
+				objk=TRASSA1[ii].object&0xfff;
+				objk_next=TRASSA1[ii+1].object&0xfff;
+				if((objk>=KOL_VO)||(objk<=0))return;
+				read_FR3(objk);
+				FR3[20]=FR3[20]|(objk_next/256);
+				FR3[21]=objk_next%256;
+				//сохранить измененные массивы на виртуальном диске
+				write_FR3(objk);
+			}
+		}
 out1:
 		ZERO_TRASSA1();
-  }
+	}
 }
 //============================================================
 /*********************************************\
@@ -2583,16 +2813,16 @@ out1:
 \*********************************************/
 void set_vvod(void)
 {
-  char vvod[32];
-  int Kom,NAC,KON,K_STR,i,j;
+	char vvod[32];
+	int Kom,NAC,KON,K_STR,i,j;
 begin0:
-  textattr(0xA);
-  gotoxy(4,10);cputs("Команда ");gets(vvod);Kom=atoi(vvod);
-  if(Kom==1000) //прямой ввод данных ТУМСа
-  {
+	textattr(0xA);
+	gotoxy(4,10);cputs("Команда ");gets(vvod);Kom=atoi(vvod);
+	if(Kom==1000) //прямой ввод данных ТУМСа
+	{
 snova:
   	gotoxy(4,11);cputs("Номер ТУМС ");gets(vvod);NAC=atoi(vvod);
-    if(NAC>=Nst)goto snova;
+		if(NAC>=Nst)goto snova;
     gotoxy(4,12);cputs("Пакет ТС от ТУМС ");
     i=0;
 		while(1)
@@ -2611,7 +2841,7 @@ snova:
       		if(i!=0)
 					{
 						i--;
-        		putch(8);
+						putch(8);
         		putch(0x20);
         		putch(8);
         	}
@@ -2631,14 +2861,14 @@ snova:
 		return;
 	}
 
-  if((Kom==191)||(Kom==192))
+	if((Kom>=187)&&(Kom<=192))
   {
 begin:
-    gotoxy(4,11);cputs("Начало маршрута ");gets(vvod);NAC=atoi(vvod);
-    if(NAC>=KOL_VO)goto begin;
+		gotoxy(4,11);cputs("Начало маршрута ");gets(vvod);NAC=atoi(vvod);
+		if((NAC>=KOL_VO)||(NAC<=0))goto begin;
 begin1:
     gotoxy(4,12);cputs("Конец маршрута ");gets(vvod);KON=atoi(vvod);
-    if(KON>=KOL_VO)goto begin1;
+		if((KON>=KOL_VO)||(KON<=0))goto begin1;
 begin2:
     gotoxy(4,13);cputs("Число стрелок ");gets(vvod);K_STR=atoi(vvod);
     if(K_STR>=32)goto begin2;
@@ -2646,7 +2876,7 @@ begin2:
     gotoxy(4,14);cputs("Положение стрелок ");
 begin3:
     for(i=0;i<32;i++)vvod[i]=0;
-    i=0;
+		i=0;
     while(vvod[i]!=13)
     {
       vvod[i]=getch();
@@ -2669,7 +2899,7 @@ begin3:
     for(i=0;i<8;i++)if(vvod[i+16]=='1')KOMANDA_MARS[0][0][8]=KOMANDA_MARS[0][0][8]|(1<<i);
     for(i=0;i<8;i++)if(vvod[i+24]=='1')KOMANDA_MARS[0][0][9]=KOMANDA_MARS[0][0][9]|(1<<i);
     vvod_set=0;
-    MAKE_MARSH(0,0);
+		MAKE_MARSH(0,0);
     vvod_set=0;
 		return;
   }
@@ -2677,11 +2907,11 @@ begin3:
   {
 beg:
     puts1("Начало маршрута ",0xa,4,10);gets(vvod);NAC=atoi(vvod);
-    if(NAC>=KOL_VO)goto begin;
+		if((NAC>=KOL_VO)||(NAC<=0))goto begin;
     KOMANDA_RAZD[0][0][0]=Kom;
-    KOMANDA_RAZD[0][0][1]=NAC%256;
+		KOMANDA_RAZD[0][0][1]=NAC%256;
     KOMANDA_RAZD[0][0][2]=NAC/256;
-    MAKE_KOMANDA(0,0,0);
+		MAKE_KOMANDA(0,0,0);
     vvod_set=0;
     return;
   }
@@ -2704,7 +2934,7 @@ beg:
 		return;
 	}
   puts1("Объект",0xa,4,12);gotoxy(8,2);gets(vvod);NAC=atoi(vvod);
-  KOMANDA_RAZD[0][0][0]=Kom;
+	KOMANDA_RAZD[0][0][0]=Kom;
   KOMANDA_RAZD[0][0][1]=NAC%256;
 	KOMANDA_RAZD[0][0][2]=NAC/256;
   MAKE_KOMANDA(0,0,0);
@@ -2718,7 +2948,68 @@ beg:
 \*************************************/
 int tst_str_ohr(void)
 {
-  return(0);
+	int strlka,para,sp_osn,sp_par,poloj;
+	strlka=bd_osn[2];//охранная стрелка
+	sp_osn=bd_osn[3];//СП охранной стрелки
+	para=bd_osn[4];  //парная стрелка
+	sp_par=bd_osn[5];//СП парной стрелки
+	poloj=bd_osn[6]; //охранное положение
+	//проверка охранной стрелки
+	read_FR3(strlka);//прочитать состояние стрелки
+	if(FR3[11]==1)return(1010);	 //если стрелка непарафазна
+	if(FR3[9]==1)return(1011);   //если стрелка потеряла контроль
+	if(poloj==0)		 //если положение стрелки плюсовое
+	{
+		if((FR3[1]!=1)||(FR3[3]!=0))//если стрелка не в плюсе (надо переводить)
+		{
+			read_FR3(sp_osn); //прочитать текущее состояние основного СП
+			if(FR3[11]==1)return(1016);//если СП непарафазно
+			if(FR3[1]!=0)return(1012); //если СП занято
+			if(FR3[3]!=0)return(1013); //если СП замкнуто
+			if(FR3[5]!=0)return(1014); //если СП в разделке
+			if(FR3[7]!=0)return(1015); //если в работе МСП
+		}
+	}
+	if(poloj==1)		 //если положение стрелки минусовое
+	{
+		if((FR3[1]!=0)||(FR3[3]!=1))//если стрелка не в минусе (надо переводить)
+		{
+			read_FR3(sp_osn); //прочитать текущее состояние основного СП
+			if(FR3[1]!=0)return(1012); //если СП занято
+			if(FR3[3]!=0)return(1013); //если СП замкнуто
+			if(FR3[5]!=0)return(1014); //если СП в разделке
+			if(FR3[7]!=0)return(1015); //если в работе МСП
+		}
+	}
+	if(para==0)return(0);
+	//проверка парной стрелки
+	read_FR3(para);//прочитать состояние стрелки
+	if(FR3[11]==1)return(1010);	 //если стрелка непарафазна
+	if(FR3[9]==1)return(1011);   //если стрелка потеряла контроль
+	if(poloj==0)		 //если положение стрелки плюсовое
+	{
+		if((FR3[1]!=1)||(FR3[3]!=0))//если стрелка не в плюсе (надо переводить)
+		{
+			read_FR3(sp_par); //прочитать текущее состояние СП пары
+			if(FR3[11]==1)return(1016);//если СП непарафазно
+			if(FR3[1]!=0)return(1012); //если СП занято
+			if(FR3[3]!=0)return(1013); //если СП замкнуто
+			if(FR3[5]!=0)return(1014); //если СП в разделке
+			if(FR3[7]!=0)return(1015); //если в работе МСП
+		}
+	}
+	if(poloj==1)		 //если положение стрелки минусовое
+	{
+		if((FR3[1]!=0)||(FR3[3]!=1))//если стрелка не в минусе (надо переводить)
+		{
+			read_FR3(sp_par); //прочитать текущее состояние основного СП
+			if(FR3[1]!=0)return(1012); //если СП занято
+			if(FR3[3]!=0)return(1013); //если СП замкнуто
+			if(FR3[5]!=0)return(1014); //если СП в разделке
+			if(FR3[7]!=0)return(1015); //если в работе МСП
+		}
+	}
+	return(0);
 }
 //================================================================
 /***************************************\
@@ -2726,7 +3017,7 @@ int tst_str_ohr(void)
 \***************************************/
 void re_set(void)
 {
-   int value;
+	 int value;
    jmp_buf jumper;
 #ifdef WORK
   reset_int_vect1();
@@ -2756,23 +3047,30 @@ void re_set(void)
 * R_U - район управления                           *
 *                                                  *
 \**************************************************/
-void Soob_For_Arm(int ARM_N,int N_mar, int sos)
+void Soob_For_Arm(int N_mar, int sos, int kodik)
 {
-	int objserv;
-  if(N_mar<Nst*3)  //если номер маршрута в пределах размерности
-  {
-		objserv=MARSHRUT_ALL[N_mar].NACH;
-    KVIT_ARMu1[ARM_N][0][0]=((out_ob[objserv]&0xff00)>>8)|0x40;
-    KVIT_ARMu1[ARM_N][0][1]=out_ob[objserv]&0xff;
-    if(sos==0)KVIT_ARMu1[ARM_N][0][2]=7;
-    else KVIT_ARMu1[ARM_N][0][2]=1;
+	int ARM_N,objserv,ranj;
+	unsigned char BYTES[2],chislo[6];
+	if(sos!=0)objserv=sos;
+	else return;
+	itoa(kodik,chislo,10);
+	BYTES[1]=((out_ob[objserv]&0xff00)>>8)|0x40;
+	BYTES[0]=out_ob[objserv]&0xff;
+	READ_BD(sos);
+	ranj=bd_osn[13]&0xff;
+	for(ARM_N=0;ARM_N<Narm;ARM_N++)
+	{
+		if(KONFIG_ARM[ARM_N][ranj-1]==0)continue;
+		KVIT_ARMu1[ARM_N][0][0]=BYTES[0];
+		KVIT_ARMu1[ARM_N][1][0]=BYTES[0];
+		KVIT_ARMu1[ARM_N][0][1]=BYTES[1];
+		KVIT_ARMu1[ARM_N][1][1]=BYTES[1];
+		KVIT_ARMu1[ARM_N][0][2]=3;
+		KVIT_ARMu1[ARM_N][1][2]=3;
 	}
-  else
-  {
-		objserv=sos;
-    KVIT_ARMu1[ARM_N][0][0]=((out_ob[objserv]&0xff00)>>8)|0x40;
-    KVIT_ARMu1[ARM_N][0][1]=out_ob[objserv]&0xff;
-    if(sos==0)KVIT_ARMu1[ARM_N][0][2]=3;
-    else KVIT_ARMu1[ARM_N][0][2]=1;
+	if(REGIM==ANAL_MARSH)
+	{
+			puts1(PAKO[objserv],12,45,45);
+			puts1(chislo,12,45,46);
 	}
 }

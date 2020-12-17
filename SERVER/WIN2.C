@@ -9,15 +9,17 @@ void main_win(void)
 	strcpy(nom_serv,"СЕРВЕР-");
 	nom_serv[7]=SERVER+48;
 	nom_serv[8]=0;
-	window(1,1,80,49);
+	window(1,49,47,49);clrscr();
+	window(1,1,80,48);
 	clrscr();
 	puts1("ПРОГРАММА РЕЛЕЙНО-ПРОЦЕССОРНОЙ ЦЕНТРАЛИЗАЦИИ ВНИИАС",0xc,15,5);
-	puts1("СТАНЦИЯ 'ОРСК'.ВЕРСИЯ 1.0",0xc,30,7);
+	puts1("СТАНЦИЯ 'ОРСК'.ВЕРСИЯ 3.0(30.01.2007)",0xc,20,7);
 	puts1("F1-просмотр каналов обмена",0xa,2,20);
 	puts1("F2-общий просмотр состояния объектов",0xa,2,21);
-	puts1("F3-детальный просмотр состояния стрелок",0xa,2,22);
+	puts1("F3-анализ каналов и объектов",0xa,2,22);
 	puts1("F4-просмотр конфигурации АРМов",0xa,2,23);
 	puts1("F5-просмотр принятых-выданных команд",0xa,2,24);
+	puts1("F7-просмотр маршрутов",0xa,2,25);
 	GRAND_TEXT(20,10,nom_serv);
 
 	//Изображение АРМ ШН
@@ -33,7 +35,7 @@ void main_win(void)
 
 	for(kk=0;kk<3;kk++)putch1(0xc4,1,77+kk,21);
 	for(kk=0;kk<65;kk++)putch1(0xCD,6,10+kk,27);
-	for(kk=0;kk<73;kk++)putch1(0xCD,6,3+kk,49);
+	for(kk=0;kk<73;kk++)putch1(0xCD,6,3+kk,48);
 
 	for(kk=0;kk<46;kk++)putch1(0xCD,2,3+kk,38);putch1(0xbb,2,49,38);
 	for(kk=0;kk<7;kk++)putch1(0xba,2,49,kk+39);
@@ -92,8 +94,7 @@ void main_win(void)
 		putch1(0xd9,7,6+6*ll,45);
 		putch1(0x1e,6,4+6*ll,46);
 		putch1(0xb3,6,4+6*ll,47);
-		putch1(0xb3,6,4+6*ll,48);
-		putch1(0x1f,6,4+6*ll,49);
+		putch1(0x1f,6,4+6*ll,48);
 	}
 	for(ll=0;ll<3;ll++)
 	{
@@ -138,7 +139,7 @@ void main_win(void)
 		//резервные связи с УВК
 		putch1(0x1e,6,54+9*ll,46-2*ll);
 		for(kk=0;kk<2*ll+2;kk++)putch1(0xb3,6,54+9*ll,47-2*ll+kk);
-		putch1(0x1f,6,54+9*ll,47-2*ll+kk);
+		putch1(0x1f,6,54+9*ll,47-2*ll+kk-1);
 
 	}
 	return;
@@ -149,7 +150,8 @@ void win_object(void)
 {
 	int i,j,k,st,soob;
 	unsigned char nomer[6],atr;
-	window(1,1,80,49);
+	window(1,49,47,49);clrscr();
+	window(1,1,80,48);
 	clrscr();textattr(0xf);
 	for(i=1;i<=46;i++)
 	{
@@ -220,21 +222,13 @@ void win_object(void)
   }
 	puts1("█-стрелки",0xa,2,48);
 	puts1("█-сигналы",0xe,2,49);
-	puts1("█-доп.об-ты",0xd,15,48);
-	puts1("█-СП и УП",0x6,15,49);
-	puts1("█-пути",0xf,30,48);
-	puts1("█-эл-ты УВК",0x9,30,49);
-	puts1("█-ненормы",0xc,45,48);
-	puts1("█-старое",0xb,45,49);
-	puts1("Новизна",0xf,60,48);
-	putch1('█',0x8a,60,49);
-	putch1('█',0x8e,61,49);
-  putch1('█',0x8d,62,49);
-  putch1('█',0x86,63,49);
-  putch1('█',0x8f,64,49);
-  putch1('█',0x89,65,49);
-  putch1('█',0x8c,66,49);
-  for(i=0;i<Nst;i++)
+	puts1("█-доп.об-ты",0xd,12,48);
+	puts1("█-СП и УП",0x6,12,49);
+	puts1("█-пути",0xf,24,48);
+	puts1("█-эл-ты УВК",0x9,24,49);
+	puts1("█-ненормы",0xc,36,48);
+	puts1("█-старое",0xb,36,49);
+	for(i=0;i<Nst;i++)
 	{
     for(soob=0;soob<48;soob++)
     {
@@ -250,23 +244,25 @@ void win_object(void)
 //======================================================
 void win_analiz(void)
 {
-	window(1,1,80,49);
+	window(1,49,47,49);clrscr();
+	window(1,1,80,48);
 	clrscr();textmode(64);
 	_setcursortype(_NOCURSOR);
 	textattr(0xC);
 	puts1("АНАЛИЗ КАНАЛОВ И ОБЪЕКТОВ (F6-Пуск/стоп)",0xc,20,1);
 	puts1("F10 + номер  - просмотр состояния объекта в сервере",0xc,10,3);
-  X_ANALIZ_OUT=0;
-  Y_ANALIZ_OUT=5;
-  X1_ANALIZ_OUT=0;
-  Y1_ANALIZ_OUT=6;
+	X_ANALIZ_OUT=0;
+	Y_ANALIZ_OUT=5;
+	X1_ANALIZ_OUT=0;
+	Y1_ANALIZ_OUT=6;
 }
 //=============================================================
 void win_konfig(void)
 {
 	int i,j;
 	unsigned char upr;
-	window(1,1,80,49);
+	window(1,49,47,49);clrscr();
+	window(1,1,80,48);
 	clrscr();textmode(64);
 	_setcursortype(_NOCURSOR);
 	puts1("КОНФИГУРАТОР АРМ",0xa,33,1);
@@ -307,27 +303,28 @@ void win_konfig(void)
 void win_comm(void)
 {
 	int i;
-	window(1,1,80,49);
+	window(1,49,47,49);clrscr();
+	window(1,1,80,48);
 	clrscr();textmode(64);
 	_setcursortype(_NOCURSOR);
 	puts1("КОМАНДЫ АРМА ДСП",0xA,13,1);
 	putch1('╔',0xA,2,2);
 	for(i=0;i<45;i++)putch1('═',0xa,3+i,2);
 	putch1('╗',0xa,48,2);
-	for(i=3;i<50;i++)putch1('║',0xa,2,i);
-	putch1('╚',0xa,2,49);
-	for(i=0;i<45;i++)putch1('═',0xa,3+i,49);
-	putch1('╝',0xa,48,49);
-	for(i=3;i<49;i++)putch1('║',0xa,48,i);
+	for(i=3;i<49;i++)putch1('║',0xa,2,i);
+	putch1('╚',0xa,2,48);
+	for(i=0;i<45;i++)putch1('═',0xa,3+i,48);
+	putch1('╝',0xa,48,48);
+	for(i=3;i<48;i++)putch1('║',0xa,48,i);
 	puts1("КОМАНДЫ СЕРВЕРА",0xa,60,1);
 	putch1('╔',0xa,51,2);
 	for(i=0;i<26;i++)putch1('═',0xa,52+i,2);
 	putch1('╗',0xa,78,2);
-	for(i=3;i<50;i++)putch1('║',0xa,51,i);
-	putch1('╚',0xa,51,49);
-	for(i=0;i<26;i++)putch1('═',0xa,52+i,49);
-	putch1('╝',0xa,78,49);
-	for(i=3;i<49;i++)putch1('║',0xa,78,i);
+	for(i=3;i<49;i++)putch1('║',0xa,51,i);
+	putch1('╚',0xa,51,48);
+	for(i=0;i<26;i++)putch1('═',0xa,52+i,48);
+	putch1('╝',0xa,78,48);
+	for(i=3;i<48;i++)putch1('║',0xa,78,i);
 	return;
 }
 //=====================================================================
@@ -377,7 +374,7 @@ void GRAND_TEXT(int X,int Y,char *TXT)
                   puts1("▐█",0xa,X+4*i,Y+1);
 									puts1(" █",0xa,X+4*i,Y+2);
                   puts1(" █",0xa,X+4*i,Y+3);
-                  puts1(" █",0xa,X+4*i,Y+4);
+									puts1(" █",0xa,X+4*i,Y+4);
 									puts1("▀▀▀",0xa,X+4*i,Y+5);
                   break;
       case 0x32:  puts1("█▀█",0xa,X+4*i,Y); // "2"
@@ -414,7 +411,8 @@ void tablica(void)
 	strcpy(arm,"АРМ");
 	//подготовка экрана
 	textmode(64);
-	window(1,1,80,49);
+	window(1,49,47,49);clrscr();
+	window(1,1,80,48);
 	clrscr();
 	for(i=1;i<9;i++)
 	{
@@ -520,7 +518,7 @@ void win_gash(void)
 			putch1(17,2,49,44-2*ii);     //стрелочки из серверов на основной УВК
 			putch1(16,2,53+9*ii,44-2*ii); //стрелочки в серверы из основного УВК
 
-			putch1(31,6,54+9*ii,49);    //стрелочки из серверов в резервный УВК
+			putch1(31,6,54+9*ii,48);    //стрелочки из серверов в резервный УВК
 			putch1(30,6,54+9*ii,46-2*ii);//стрелочки в серверы из резервного УВК
 
 
@@ -531,12 +529,12 @@ void win_gash(void)
 			putch1(ii+49,7,56+9*ii,44-2*ii);//номер активного сервера
     }
 
-  	for(ii=0;ii<Nst;ii++)
+		for(ii=0;ii<Nst;ii++)
     {
 				putch1(30,2,4+6*ii,38);
     		putch1(31,2,4+6*ii,41);
 				putch1(30,6,4+6*ii,46);
-    		putch1(31,6,4+6*ii,49);
+				putch1(31,6,4+6*ii,48);
     }
 
 		for(ii=0;ii<Narm-1;ii++)
@@ -545,14 +543,14 @@ void win_gash(void)
 			putch1(31,2,11+9*ii,35);
 			putch1(30,6,11+9*ii,27);
 			putch1(31,6,11+9*ii,29);
-    }
+		}
 
-  	if(ACTIV==1)
+		if(ACTIV==1)
 		{ ii=SERVER-1;
 			putch1(ii+49,0x8a,56+9*ii,44-2*ii);
     }
 	}
-  return;
+	return;
 }
 //==========================================================================
 void obnovi(int obj1)
@@ -565,30 +563,31 @@ void obnovi(int obj1)
 //======================================================
 void win_marsh(void)
 {
-  int i;
-	window(1,1,80,49);
+	int i;
+	window(1,49,47,49);clrscr();
+	window(1,1,80,48);
 	clrscr();textmode(64);
 	_setcursortype(_NOCURSOR);
 	textattr(0xC);
 	puts1("СОСТОЯНИЕ МАРШРУТОВ",0xe,32,1);
-  puts1("ГЛОБАЛЬНЫЕ МАРШРУТЫ",0xA,13,2);
+	puts1("ГЛОБАЛЬНЫЕ МАРШРУТЫ",0xA,13,2);
 	putch1('╔',0xA,2,3);
 	for(i=0;i<37;i++)putch1('═',0xa,3+i,3);
 	putch1('╗',0xa,40,3);
-	for(i=4;i<50;i++)putch1('║',0xa,2,i);
-	putch1('╚',0xa,2,49);
-	for(i=0;i<37;i++)putch1('═',0xa,3+i,49);
-	putch1('╝',0xa,40,49);
-	for(i=4;i<49;i++)putch1('║',0xa,40,i);
+	for(i=4;i<48;i++)putch1('║',0xa,2,i);
+	putch1('╚',0xa,2,48);
+	for(i=0;i<37;i++)putch1('═',0xa,3+i,48);
+	putch1('╝',0xa,40,48);
+	for(i=4;i<48;i++)putch1('║',0xa,40,i);
 	puts1("ЛОКАЛЬНЫЕ МАРШРУТЫ",0xa,50,2);
 	putch1('╔',0xa,42,3);
 	for(i=0;i<37;i++)putch1('═',0xa,43+i,3);
 	putch1('╗',0xa,79,3);
-	for(i=4;i<50;i++)putch1('║',0xa,42,i);
-	putch1('╚',0xa,42,49);
-	for(i=0;i<37;i++)putch1('═',0xa,43+i,49);
-	putch1('╝',0xa,79,49);
-	for(i=4;i<49;i++)putch1('║',0xa,79,i);
+	for(i=4;i<48;i++)putch1('║',0xa,42,i);
+	putch1('╚',0xa,42,48);
+	for(i=0;i<37;i++)putch1('═',0xa,43+i,48);
+	putch1('╝',0xa,79,48);
+	for(i=4;i<48;i++)putch1('║',0xa,79,i);
 	return;
 
 

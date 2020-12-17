@@ -408,7 +408,9 @@ try
     end;
 
     KeyMenu_BellOff : begin // Сброс фиксируемого звонка
-      DspCommand.Active := true; DspCommand.Command := ID; DspCommand.Obj := 0; exit;
+      DspCommand.Active := true;
+      DspCommand.Command := ID;
+      DspCommand.Obj := 0; exit;
     end;
 
     KeyMenu_RejimRaboty : begin // Смена режима работы АРМа

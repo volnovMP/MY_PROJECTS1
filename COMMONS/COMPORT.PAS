@@ -699,7 +699,9 @@ begin
       GetValueNames( Val );
       for i := 0 to Val.Count - 1 do
       begin
-        if (Val.Strings[i] = 'ProductName') and (ReadString(Val.Strings[i]) = 'Microsoft Windows 2000') then
+        if (Val.Strings[i] = 'ProductName') and
+        ((ReadString(Val.Strings[i]) = 'Microsoft Windows 2000') or
+        (ReadString(Val.Strings[i]) = 'Windows Vista (TM) Home Premium')) then
         begin
           // Windows 2k
           CloseKey;

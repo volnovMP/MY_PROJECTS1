@@ -23,7 +23,8 @@ uses
   Notify in 'Notify.pas' {NotifyForm},
   KanalArmSrv in '..\Commons\KanalArmSrv.pas',
   KanalArmDc in 'KanalArmDc.pas',
-  Clock in 'Clock.pas' {ClockForm};
+  Clock in 'Clock.pas' {ClockForm},
+  KanalGora in 'KanalGora.pas';
 
 {$R *.RES}
 

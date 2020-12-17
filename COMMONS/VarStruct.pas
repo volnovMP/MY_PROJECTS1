@@ -29,7 +29,7 @@ var
   ListDiagnoz  : string;  // список диагностических сообщений УВК
   newListDiagnoz : Boolean;
   database     : string;  // Путь к базе данных, описывающей модель станции
-
+  gorabase     : string;  // Путь к базе данных, описывающей фильтр для данных на горку
   findSrv  : boolean;
   mem_page : boolean;     // false - рисовать из Tablo1, true - рисовать из Tablo2
   tab_page : boolean;     // переключатель страниц для отображения неисправности устройств

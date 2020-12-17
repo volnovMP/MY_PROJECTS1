@@ -1,4 +1,3 @@
-
 #include "opred2.h"
 #include "extern2.h"
 //=====================================================
@@ -8,7 +7,7 @@
 \***************************************************/
 void OSN_TUMS_IN(void)
 {
-  int i,svoi,tum,ik,s_m,nom,ob_str;
+	int i,svoi,tum,ik,s_m,nom,ob_str;
   unsigned char PODGR,bait;
   if(END_TUMS==0xF)//если есть прием данных по основному каналу (12 байт)
 	{
@@ -16,7 +15,7 @@ void OSN_TUMS_IN(void)
 		ADR_TUMS_OUT=ADR_TUMS_IN;
 		switch(ADR_TUMS_IN) //определение стойки по адресной части
 		{
-      case 71: ST=1;break;
+			case 71: ST=1;break;
       case 75: ST=2;break;
 			case 77: ST=3;break;
 			case 78: ST=4;break;
@@ -38,111 +37,11 @@ void OSN_TUMS_IN(void)
 
 			//если контрольная сумма совпала, то подготовить квитанцию
 			summa=check_summ(REG_IN[ST-1]);
-
 			if(summa==REG_IN[ST-1][10])//если контрольная сумма в норме
 			{
 				SVAZ_TUMS[ST-1]=0;//восстановить признак связи с ТУМС
 				PODGR=REG_IN[ST-1][9];  //выделить принятую подгруппу квитанций
-				if(((PODGR>=0x59)&&(PODGR<=0x7C))||(PODGR==0x6E)) //если это MYTHX
-				{
-					svoi=0;//изначально считаем, что MYTHX чужой
-					switch(MYTHX_TEC[ST-1]) //переключатель по действующему MYTHX
-					{
-						case 0x50: if((PODGR&0xf)==0x9)svoi=0xf;break;
-						case 0x60: if((PODGR&0xf)==0xA)svoi=0xf;break;
-						case 0x6e:
-						case 0:
-						case 0x70: if((PODGR&0xf)==0xC)svoi=0xf;break;
-						default: break;
-					}
-					if((svoi!=0)&&(MYTHX[ST-1]!=PODGR)) //если свой и изменился
-					{  //если была свободная стойка
-						if(((MYTHX[tum]&0xf0)==0x50)||((MYTHX[tum]&0xf0)==0x60)||((MYTHX[tum]&0xf0)==0x6e))
-						{
-							if((PODGR&0xF0)==0x70) // если стойка начала работу с маршрутом
-							{
-								for(s_m=0;s_m<3;s_m++) // пройти по всем маршрутам для ТУМС
-								{
-									if((MARSHRUT_ST[tum][s_m].SOST&0x3f)==0xF) //если маршрут был выдан в ТУМС
-									{
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST&0xC0;
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST|0x1f;
-										break;
-									}
-								}
-								if(s_m>=3) //если маршрут не посылался в стойки
-								{
-									for(s_m=0;s_m<3;s_m++) //для всех маршрутов-установить неудачу
-									{
-										if(MARSHRUT_ST[tum][s_m].NUM==0)continue;
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST&0xC0;
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST|0x1f;
-									}
-								}
-								MARSH_VYDAN[tum]=0;
-							}
-						}
-						else//если стойка была ранее занята
-						{
-							if((MYTHX[tum]&0xF0)==0x70)
-							{
-								if((PODGR&0xF0)==0x50)//если завершился неудачей
-								{
-									for(s_m=0;s_m<3;s_m++)
-									{
-										if((MARSHRUT_ST[tum][s_m].SOST&0x3F)==0x1F) //если воспринимался
-										{
-											MARSHRUT_ST[tum][s_m].SOST=0x1; //установить неудачу
-											break;
-										}
-									}
-								}
-								else
-								{
-									if((PODGR&0xF0)==0x60) //если завершился успешно
-									{
-										for(s_m=0;s_m<3;s_m++)
-										{
-											if((MARSHRUT_ST[tum][s_m].SOST&0x3F)==0x1f) //если воспринимался
-											{
-												nom=MARSHRUT_ST[tum][s_m].NUM-100;//получить номер
-												if(nom<Nst*3)
-												for(ik=0;ik<10;ik++) //пройти по входящим в маршрут стрелкам
-												{
-													ob_str=MARSHRUT_ALL[nom].STREL[tum][ik];//получить очередную стрелку
-													if(ob_str==0)continue;//если ее нет, идти дальше
-													read_FR3(ob_str); //прочитать состояние стрелки
-													if(FR3[1]==FR3[3])break;//если стрелка без контроля - прервать просмотр
-												}
-												if(ik>=10) //если все стрелки в контроле
-												{
-													//установить для локального - норму завершения
-													MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST|0x3f;
-												}
-												else goto FIN; //если нет полного контроля стрелок - уйти
-												break;
-											}
-										}
-										if(s_m>=3) //если маршрут не воспринимался - сообщить
-										{
-											Soob_For_Arm(0,Nst*3,0);
-										}
-									}
-									else //если MYTHX не штатный - сообщить
-									{
-										Soob_For_Arm(0,Nst*3,0);
-									}
-								}
-							}
-						}
-					}
-					if(svoi!=0)MYTHX[tum]=PODGR; //если был свой MYTHX, запомнить его
-					if(MYTHX[tum]==0)MYTHX[tum]=PODGR;//если первый прием - запомнить
-					putch1(MYTHX[tum],10,66+tum,50);
-					putch1(MYTHX_TEC[tum]|0x40,12,66+tum,50);
-
-				}
- FIN:
+				ANALIZ_MYTHX(PODGR);
 				if((PODGR>=0x30)&&(PODGR<=0x58))//если пришла квитанция на команду
 				{ bait=REG_IN[ST-1][11];//выделить код номера байта
 					switch(bait)
@@ -160,16 +59,16 @@ void OSN_TUMS_IN(void)
 						if((KOMANDA_TUMS[ST-1][3]==PODGR)&& //если подгруппа была в команде
 						(KOMANDA_TUMS[ST-1][4]==(bait|0x40))) //если байт соответствует
 						{
-							puts1("M-",0xa,51,50); //вывести индикатор маршр.подтверждения
-							putch1(PODGR,0xa,53,50); //вывести подгруппу квитанции
-							putch1(bait|0x40,0xa,54,50);
+							puts1("M-",0xa,51,49); //вывести индикатор маршр.подтверждения
+							putch1(PODGR,0xa,53,49); //вывести подгруппу квитанции
+							putch1(bait|0x40,0xa,54,49);
 							for(i=0;i<15;i++)KOMANDA_TUMS[ST-1][i]=0;//сбросить команду
 						}
 						else //если получена неправильная квитанция
 						{
-							puts1("M!",0x8a,51,50); //вывести индикатор ошибки маршр.подтверждения
-							putch1(PODGR,0x8a,53,50); //вывести подгруппу квитанции
-							putch1(bait|0x40,0x8a,54,50); //вывести байт квитанции
+							puts1("M!",0x8a,51,49); //вывести индикатор ошибки маршр.подтверждения
+							putch1(PODGR,0x8a,53,49); //вывести подгруппу квитанции
+							putch1(bait|0x40,0x8a,54,49); //вывести байт квитанции
 						}
 					}
 
@@ -178,20 +77,20 @@ void OSN_TUMS_IN(void)
 						if(((KOMANDA_ST[ST-1][3]==PODGR)&& //если подгруппа была в команде
 						(KOMANDA_ST[ST-1][4+bait])!=124))  //если байт соответствует
 						{
-							puts1("R-",0xa,56,50); //вывести индикатор разд.подтверждения
-							putch1(PODGR,0xa,58,50);
-							putch1(bait+48,0xa,59,50);
+							puts1("R-",0xa,56,49); //вывести индикатор разд.подтверждения
+							putch1(PODGR,0xa,58,49);
+							putch1(bait+48,0xa,59,49);
 							for(i=0;i<15;i++)KOMANDA_ST[ST-1][i]=0;//сбросить команду
 						}
 						else
 						{
-							puts1("R!",0x8a,56,50); //вывести индикатор ошибки подтверждения
-							putch1(PODGR,0x8a,58,50); //вывести подгруппу квитанции
-							putch1(REG_IN[ST-1][11],0x8a,59,50);
+							puts1("R!",0x8a,56,49); //вывести индикатор ошибки подтверждения
+							putch1(PODGR,0x8a,58,49); //вывести подгруппу квитанции
+							putch1(REG_IN[ST-1][11],0x8a,59,49);
 						}
 					}
 				}
-				else putch1(124,0xa,49,50); //если из стойки не квитанция
+				else putch1(ST+48,0xa,49+ST,50); //если из стойки не квитанция
 
 				//заполнить квитанцию сервера для ТУМСа
 				KVIT_TUMS[ST-1][0]='$';
@@ -212,7 +111,7 @@ void OSN_TUMS_IN(void)
 			}
 			else
 			{
-				putch(7);
+				add(ST-1,3333,0);
 				sbros_tums(0); //если контрольная сумма не в норме
 			}
 
@@ -288,124 +187,7 @@ void REZ_TUMS_IN(void)
 			{
 				SVAZ_TUMS[ST-1]=0;
 				PODGR=REG1_IN[ST-1][9]; //выделить принятую подгруппу квитанций
-				if(((PODGR>=0x59)&&(PODGR<=0x7C))||(PODGR==0x6e)) //если это MYTHX
-				{
-					svoi=0;
-					switch(MYTHX_TEC[ST-1])
-					{
-						case 0x50: if((PODGR&0xf)==0x9)svoi=0xf;break;
-						case 0x60: if((PODGR&0xf)==0xA)svoi=0xf;break;
-						case 0x6e:
-						case 0:
-						case 0x70: if((PODGR&0xf)==0xC)svoi=0xf;break;
-						default: break;
-					}
-					if((svoi!=0)&&(MYTHX[ST-1]!=PODGR))
-					{
-						if(((MYTHX[tum]&0xf0)==0x50)||((MYTHX[tum]&0xf0)==0x60)) //если была свободная стойка
-						{
-							if((PODGR&0xF0)==0x70) // если стойка начала работу с маршрутом
-							{
-      			 		for(s_m=0;s_m<3;s_m++) // пройти по всем маршрутам для ТУМС
-      					{
-      						if((MARSHRUT_ST[tum][s_m].SOST&0x3f)==0xF) //если маршрут был выдан в ТУМС
-      						{
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST&0xC0;
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST|0x1f;
-										break;
-									}
-								}
-								if(s_m>=3) //если маршрут не посылался в стойки
-								{
-									for(s_m=0;s_m<3;s_m++) //для всех маршрутов-установить неудачу
-									{
-										if(MARSHRUT_ST[tum][s_m].NUM==0)continue;
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST&0xC0;
-										MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST|0x1f;
-									}
-								}
-								MARSH_VYDAN[tum]=0;
-							}
-						}
-						else
-						{
-							if((MYTHX[tum]&0xF0)==0x70)
-							{
-								if((PODGR&0xF0)==0x50)
-								{
-									for(s_m=0;s_m<3;s_m++)
-									{
-										if((MARSHRUT_ST[tum][s_m].SOST&0x3F)==0x1F)
-										{
-											MARSHRUT_ST[tum][s_m].SOST=0x1;
-											break;
-										}
-									}
-								}
-								else
-								{
-									if((PODGR&0xF0)==0x60) //if success
-									{
-										for(s_m=0;s_m<3;s_m++)
-										{
-											if((MARSHRUT_ST[tum][s_m].SOST&0x3F)==0x1f)
-											{
-												nom=MARSHRUT_ST[tum][s_m].NUM-100;
-												if(nom<Nst*3)
-												for(ik=0;ik<10;ik++)
-												{
-													ob_str=MARSHRUT_ALL[nom].STREL[tum][ik];
-													if(ob_str==0)continue;
-													read_FR3(ob_str);
-													if(FR3[1]==FR3[3])break;
-												}
-												if(ik>=10)
-												{
-													MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST|0x3f;
-												}
-												else goto FIN;
-												break;
-											}
-										}
-										if(s_m>=3)
-										{
-      								Soob_For_Arm(0,Nst*3,0);
-      							}
-      						}
-      						else
-      						{
-      							Soob_For_Arm(0,Nst*3,0);
-      						}
-      					}
-      				}
-      			}
-      		}
-       		if((PODGR&0xF0)==0x50)
-      		{
-						if(MARSH_VYDAN[tum]!=0)
-      			{
-      				if(MYTHX[tum]==PODGR)
-      				{
-								for(s_m=0;s_m<3;s_m++)
-      					{
-      						if(MARSHRUT_ST[tum][s_m].T_VYD!=0)
-      						{
-										if(difftime(time(NULL),MARSHRUT_ST[tum][s_m].T_VYD)>5l)
-										{
-											MARSH_VYDAN[tum]=0;
-											MARSHRUT_ST[tum][s_m].SOST=MARSHRUT_ST[tum][s_m].SOST&0x1;
-											break;
-										}
-									}
-								}
-							}
-						}
-					}
-					if(svoi!=0)MYTHX[tum]=PODGR;
-					putch1(MYTHX[tum],10,66+tum,50);
-					putch1(MYTHX_TEC[tum]|0x40,12,66+tum,50);
-				}
- FIN:
+				ANALIZ_MYTHX(PODGR);
 				if((PODGR>=0x30)&&(PODGR<=0x58))//если пришла квитанция на команду
 				{ bait=REG1_IN[ST-1][11]; //выявить код номера байта квитанции
 					switch(bait)
@@ -422,16 +204,16 @@ void REZ_TUMS_IN(void)
 						if((KOMANDA_TUMS[ST-1][3]==PODGR)&& //если объект квитанции и команды совпадают
 						(KOMANDA_TUMS[ST-1][4]==(bait|0x40))) //если байт квитанции и команды совпадают
 						{
-							puts1("M-",0xc,51,50); //вывести индикатор маршр.подтверждения
-							putch1(PODGR,0xc,53,50); //вывести подгруппу квитанции
-							putch1(bait|0x40,0xc,54,50); //вывести код байта
+							puts1("M-",0xc,51,49); //вывести индикатор маршр.подтверждения
+							putch1(PODGR,0xc,53,49); //вывести подгруппу квитанции
+							putch1(bait|0x40,0xc,54,49); //вывести код байта
 							for(i=0;i<15;i++)KOMANDA_TUMS[ST-1][i]=0;//сбросит команду марш.
 						}
 						else
 						{
-							puts1("M!",0x8c,51,50); //вывести индикатор ошибки маршр.подтверждения
-							putch1(PODGR,0x8c,53,50); //вывести подгруппу квитанции
-							putch1(bait|0x40,0x8c,54,50); //вывесим байт квитанции
+							puts1("M!",0x8c,51,49); //вывести индикатор ошибки маршр.подтверждения
+							putch1(PODGR,0x8c,53,49); //вывести подгруппу квитанции
+							putch1(bait|0x40,0x8c,54,49); //вывесим байт квитанции
 						}
 					}
 					if(KOMANDA_ST[ST-1][11]!=0) //если для стойки была раздельная
@@ -439,20 +221,20 @@ void REZ_TUMS_IN(void)
 						if(((KOMANDA_ST[ST-1][3]==PODGR)&& //если объект совпал
 						(KOMANDA_ST[ST-1][4+bait])!=124))  //если байт воздействия совпал
 						{
-							puts1("R-",0xc,56,50); //вывести индикатор разд.подтверждения
-							putch1(PODGR,0xc,58,50);
-							putch1(bait+48,0xc,59,50);
+							puts1("R-",0xc,56,49); //вывести индикатор разд.подтверждения
+							putch1(PODGR,0xc,58,49);
+							putch1(bait+48,0xc,59,49);
 							for(i=0;i<15;i++)KOMANDA_ST[ST-1][i]=0; //сбросить разд.команду
 						}
 						else //если квитанция не совпала
 						{
-							puts1("R!",0x8c,56,50); //вывести индикатор маршр.подтверждения
-							putch1(PODGR,0x8c,58,50); //вывести подгруппу квитанции
-							putch1(REG1_IN[ST-1][11],0x8c,59,50);
+							puts1("R!",0x8c,56,49); //вывести индикатор маршр.подтверждения
+							putch1(PODGR,0x8c,58,49); //вывести подгруппу квитанции
+							putch1(REG1_IN[ST-1][11],0x8c,59,49);
 						}
 					}
 				}
-				else putch1(124,0xc,49,50);
+				else putch1(ST+48,0xc,49+ST,50);
 				KVIT_TUMS1[ST-1][0]='$';
 				KVIT_TUMS1[ST-1][1]=REG1_IN[ST-1][1];
 				KVIT_TUMS1[ST-1][2]=REG1_IN[ST-1][3];
@@ -471,7 +253,7 @@ void REZ_TUMS_IN(void)
 			}
 			else
 			{
-				putch(7);
+				add(ST-1,3333,1);
 				sbros_tums(1);
 			}
 
@@ -498,7 +280,7 @@ void REZ_TUMS_IN(void)
 			}
 			if(REGIM==0)
 			{
-				putch1(31,14,4+6*(ST-1),49);
+				putch1(31,14,4+6*(ST-1),48);
 				putch1(30,14,54+9*(SERVER-1),46-2*(SERVER-1));
 			}
 		}
@@ -532,18 +314,16 @@ void consentr1(void)
 			}
 			else
 			{
-				if(REG_IN[i][3]>=112)//если диагностика
-				{ if((GRUPPA=='J')&&(FLAG_KOM==0))
-					{
-						if(test_plat(i,0)==-1) { for(jj=0;jj<6;jj++)ERR_PLAT[jj]=0;continue; }
-						soob=44; add(i,soob,0);//выполнить коррекцию
-					}
-					else continue;
-
+				if(((GRUPPA=='X')||(GRUPPA=='J'))&&(FLAG_KOM==0))
+				{ if(test_plat(i,0)==-1)for(jj=0;jj<6;jj++)ERR_PLAT[jj]=0;
+					soob=44; add(i,soob,0);//выполнить коррекцию
 					novizna=0; nov_bit=0;
 					for(j=0;j<6;j++)//пройти по всем байтам сообщения
 					{
-						if(VVOD[i][soob][j]!=REG_IN[i][j+4])novizna=novizna|(1<<j); //выявить новизну
+						if(VVOD[i][soob][j]!=REG_IN[i][j+4])
+						{
+							if(j<5)novizna=novizna|(1<<j); //выявить новизну
+						}
 						VVOD[i][soob][j]=REG_IN[i][j+4];//записать данные в массив ввода
 					}
 					if((novizna==0)&&(nov_bit!=0))novizna=0x1f;
@@ -555,14 +335,20 @@ void consentr1(void)
 					for(j=0;j<6;j++)//пройти по всем байтам сообщения
 					{
 						//выявить новизну
-						if(VVOD[i][soob][j]!=REG_IN[i][j+4])novizna=novizna|(1<<j);
+						if(VVOD[i][soob][j]!=REG_IN[i][j+4])
+						{
+							if(j<5)novizna=novizna|(1<<j);
+						}
 						VVOD[i][soob][j]=REG_IN[i][j+4];//записать данные в массив ввода
 					}
 				}
 			}
 			VVOD[i][soob][6]=0;//ограничитель строки
+#ifndef TEST2
 			if((novizna!=0)||(fixir!=0))add(i,soob,0);
-
+#else
+			add(i,soob,0);
+#endif
 			if((soob!=45)&&(soob!=44))//если сообщения не диагностические
 			{
 				STROKA=TAKE_STROKA(GRUPPA,soob,i);//вычисление строки номеров объектов
@@ -639,7 +425,10 @@ aa1:
 				for(j=0;j<6;j++)//пройти по всем байтам сообщения
 				{
 					//выявить новизну
-					if(VVOD[i][soob][j]!=REG1_IN[i][j+4])novizna=novizna|(1<<j);
+					if(VVOD[i][soob][j]!=REG1_IN[i][j+4])
+					{
+						if(j<5)novizna=novizna|(1<<j);
+					}
 					VVOD[i][soob][j]=REG1_IN[i][j+4];//записать данные в массив ввода
 					nov_bit=nov_bit+(VVOD[i][soob][j]&0x3f);
 				}
@@ -651,11 +440,18 @@ aa1:
 			for(j=0;j<6;j++)
 			{
 				//выявить новизну
-				if(VVOD[i][soob][j]!=REG1_IN[i][j+4])novizna=novizna|(1<<j);
+				if(VVOD[i][soob][j]!=REG1_IN[i][j+4])
+				{
+					if(j<5)novizna=novizna|(1<<j);
+				}
 				VVOD[i][soob][j]=REG1_IN[i][j+4];//записать данные в массив ввода
 			}
 			VVOD[i][soob][6]=0;//ограничитель строки
+#ifndef TEST2
 			if((novizna!=0)||(fixir!=0))add(i,soob,1);
+#else
+			add(i,soob,1);
+#endif
 			if((soob!=45)&&(soob!=44))
 			{
 				STROKA=TAKE_STROKA(GRUPPA,soob,i);//вычисление строки номеров объектов
@@ -706,7 +502,7 @@ void add(int st,int sob,int knl)
 	//записать время и номер ТУМСа
 	strcpy(ZAPIS,TIME);
 	strncat(ZAPIS," ",1);
-	if((sob!=200)&&(sob!=300)&&(sob!=7777)&&(sob!=6666))
+	if((sob!=200)&&(sob!=300)&&(sob!=7777)&&(sob!=6666)&&(sob!=3333))
 	{
 		tms[0]=st+49;
 		tms[1]=32;
@@ -746,6 +542,15 @@ void add(int st,int sob,int knl)
 		else
 			if(sob==100) strncat(ZAPIS,"BEGIN",5);
 			else
+				if(sob==3333)//если нарушена контрольная сумма
+				{
+					strncat(ZAPIS,"$$$ ",4);
+					strncat(ZAPIS,REG_IN[st],12);
+					strncat(ZAPIS,"->",2);
+					if(knl==0)strncat(ZAPIS,"осн",3);
+					else strncat(ZAPIS,"рез",3);
+				}
+				else
 				if(sob==8888)  //если удаление маршрута
 				{
 					strncat(ZAPIS,"{удал}",6);
@@ -764,7 +569,7 @@ void add(int st,int sob,int knl)
 				else
 				if(sob==6666)  //если создан локальный
 				{
-					strncat(ZAPIS,MARSHRUT_ST[st][knl].NEXT_KOM,12);
+					strncat(ZAPIS,MARSHRUT_ST[st][knl].NEXT_KOM,13);
 				}
 				else
 				if(sob!=9999)	//если не команда
@@ -853,12 +658,12 @@ int diagnoze(int st,int kan)
 			switch(gru)//нахождение объекта сервера 
 			{
 				case 'E': for(ff=0;ff<5;ff++)nm[ff]=SPSIG[strk][ff];break;
-				case 'F': for(ff=0;ff<10;ff++)nm[ff]=SPSP[strk][ff];break;
-				case 'I': for(ff=0;ff<10;ff++)nm[ff]=SPPUT[strk][ff];break;
+				case 'F': for(ff=0;ff<10;ff++)nm[ff]=SPSP[strk][ff];break;  //$$$$ 13_04_07 удалено из-за ошибочной диагностики
+				case 'I': for(ff=0;ff<10;ff++)nm[ff]=SPPUT[strk][ff];break; //$$$$ 13_04_07 удалено из-за ошибочной диагностики
 				default: error_diag=-1;break;
 			}
 			nom_serv=nm[bt];
-			if(nom_serv>KOL_VO)error_diag=-1;
+			if((nom_serv>=KOL_VO)||(nom_serv<=0))error_diag=-1;
 			else
 			{
 				DIAGNOZ[1]=((out_ob[nom_serv]&0xFF00)>>8)|0x20;//нахождение объекта АРМов
@@ -983,37 +788,42 @@ void ZERO_TRASSA1(void)
 void DeleteMarsh(int i_m)
 {
 	int i_s,s_m,ii,strelka;
+
 	for(i_s=0;i_s<Nst;i_s++)//пройти по всем стойкам
 	{
-		MARSHRUT_ALL[i_m].KOL_STR[i_s]=0;
-		MARSHRUT_ALL[i_m].STOYKA[i_s]=0;
-		for(s_m=0;s_m<10;s_m++)
+		MARSHRUT_ALL[i_m].KOL_STR[i_s]=0; //удалить счетчики стрелок для всех стоек
+		MARSHRUT_ALL[i_m].STOYKA[i_s]=0; //удалить признаки вхождения стоек в маршрут
+		for(s_m=0;s_m<10;s_m++) //пройти по таблицам стрелок,сигналов и СП_УП
 		{
-			strelka=MARSHRUT_ALL[i_m].STREL[i_s][s_m];
-			if(strelka!=0)POOO[strelka]=0l;
-			MARSHRUT_ALL[i_m].SIG[i_s][s_m]=0;
-			MARSHRUT_ALL[i_m].SP_UP[i_s][s_m]=0;
+			strelka=MARSHRUT_ALL[i_m].STREL[i_s][s_m]&0xfff;//выделить номер стрелки
+			if(strelka!=0) //если найден номер стрелки
+			{
+				POOO[strelka]=0l; //сбросить счетчик времени для стрелки
+				MARSHRUT_ALL[i_m].STREL[i_s][s_m]=0;//удалить стрелку из таблицы
+			}
+			MARSHRUT_ALL[i_m].SIG[i_s][s_m]=0;//удалить сигнал из таблицы
+			MARSHRUT_ALL[i_m].SP_UP[i_s][s_m]=0; //удалить СП или УП из таблицы
 		}
 	}
-	MARSHRUT_ALL[i_m].KMND=0;
-	MARSHRUT_ALL[i_m].NACH=0;
-	MARSHRUT_ALL[i_m].END=0;
-	MARSHRUT_ALL[i_m].NSTR=0;
-	MARSHRUT_ALL[i_m].NSTR=0;
-	MARSHRUT_ALL[i_m].POL_STR=0;
-	MARSHRUT_ALL[i_m].SOST=0;
+	MARSHRUT_ALL[i_m].KMND=0;    //очистить ячейку команды
+	MARSHRUT_ALL[i_m].NACH=0;    //очистить ячейку начала
+	MARSHRUT_ALL[i_m].END=0;	//очистить ячейку конца
+	MARSHRUT_ALL[i_m].NSTR=0;	//очистить число стрелок
+	MARSHRUT_ALL[i_m].POL_STR=0;	//очистить положение стрелок
+	MARSHRUT_ALL[i_m].SOST=0;    //очистить учетчик состояния глобального маршрута
 
-	for(i_s=0;i_s<Nst;i_s++)
-	for(s_m=0;s_m<3;s_m++)
+	for(i_s=0;i_s<Nst;i_s++)	//пройти по стойкам
+	for(s_m=0;s_m<MARS_STOY;s_m++) //пройти по локальным в стойке
 	{
-		if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m)
+		if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m) //если локальный для удаляемого
 		{
-			for(ii=0;ii<12;ii++)MARSHRUT_ST[i_s][s_m].NEXT_KOM[ii]=0;
-			MARSHRUT_ST[i_s][s_m].NUM=0;
-			MARSHRUT_ST[i_s][s_m].SOST=0;
-			MARSHRUT_ST[i_s][s_m].T_VYD=0l;
-			MARSHRUT_ST[i_s][s_m].T_MAX=0l;
-			MARSH_VYDAN[i_s]=0;
+			for(ii=0;ii<13;ii++)MARSHRUT_ST[i_s][s_m].NEXT_KOM[ii]=0; //удалить команду
+			TUMS_RABOT[i_s]=0; //$$$$ 13_04_07 - разблокирование стойки не воспринявший маршрут
+			MARSHRUT_ST[i_s][s_m].NUM=0; //удалить номер глобального
+			MARSHRUT_ST[i_s][s_m].SOST=0; //очистить состояние
+			MARSHRUT_ST[i_s][s_m].T_VYD=0l; //очистить время выдачи
+			MARSHRUT_ST[i_s][s_m].T_MAX=0l; //очистить время максимума
+			MARSH_VYDAN[i_s]=0; //удалить признак выдачи
 		}
 	}
 	return;
@@ -1021,193 +831,162 @@ void DeleteMarsh(int i_m)
 //=======================================================================
 void  Analiz_Glob_Marsh(void)
 {
-  int i_m, i_s, s_m, ii,mars_st;
+	int i_m, i_s, s_m,ii,mars_st,ij,ik,ijk,ob_str,polojen;
 	unsigned int KOM;
 	time_t t_tek;
 	double Delta;
-	unsigned char kateg, Sost;
+	unsigned char kateg, Sost=0;
 	// пройти по всей глобальной таблице маршутов
 	for(i_m=0; i_m<Nst*3; i_m++)
 	{
-		//если строка пустая - к следующей
-		if(MARSHRUT_ALL[i_m].SOST==0)continue;
-		 //взять категорию текущего глобального маршрута
-		kateg=0xC0&MARSHRUT_ALL[i_m].SOST;
-		//считаем маршрут не розданным
-		mars_st=0;
-		//изначально расчитываем на успешное завершение
-		Sost=0x3f;
-		//пройти по всем стойкам
-		for(i_s=0;i_s<Nst;i_s++)
-		{
-			//если в стойке есть любой выданный маршрут - перейти к следующей
-			if(MARSH_VYDAN[i_s]==0xF)continue;
-			//если стойка участвует в анализируемом маршруте
-			if(MARSHRUT_ALL[i_m].STOYKA[i_s]!=0)
+		if(MARSHRUT_ALL[i_m].SOST==0)continue;//если строка пустая - к следующей
+		kateg=0xC0&MARSHRUT_ALL[i_m].SOST; //взять категорию глобального маршрута
+		mars_st=0; //считаем маршрут не розданным
+		Sost=0x3f; //изначально расчитываем на успешное завершение
+
+		for(i_s=0;i_s<Nst;i_s++) //пройти по всем стойкам
+		{ if(MARSHRUT_ALL[i_m].STOYKA[i_s]!=0)	//если стойка участвует
 			{
-				 //пройти по всем локальным маршрутам стойки
-				for(s_m=0;s_m<3;s_m++)
-				{ //если нет этого локального - перейти к следующему
-					if(MARSHRUT_ST[i_s][s_m].NUM==0)continue;
-					//если найден локальный для этого глобального
-					if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m)
-					{  //сформировать новое состояние и прерваться
-						Sost=(Sost&MARSHRUT_ST[i_s][s_m].SOST);
-						break;
+				for(s_m=0;s_m<MARS_STOY;s_m++)  	//пройти по всем локальным в стойке
+				{
+					if(MARSHRUT_ST[i_s][s_m].NUM==0)continue;//если нет - к следующему
+
+					if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m) //если найден
+					{
+						mars_st++; //увеличить счетчик стоек
+						//если не выдан, перейти к следующему
+						if(MARSHRUT_ST[i_s][s_m].T_VYD==0)
+						MARSHRUT_ST[i_s][s_m].SOST=(MARSHRUT_ST[i_s][s_m].SOST&0xC)|0x7;				
+						if((MARSHRUT_ST[i_s][s_m].SOST&0x1f)!=0x1f)//если маршрут не воспринят
+						{
+#ifdef WORK
+							if((T_TIME-MARSHRUT_ST[i_s][s_m].T_VYD)>2)//если прошло более 2 сек от выдачи
+#else
+							if((T_TIME-MARSHRUT_ST[i_s][s_m].T_VYD)>2)
+#endif
+							{
+								if(MARSHRUT_ST[i_s][s_m].T_VYD!=0) //если фиксировалась выдача
+								{
+									if(KOL_VYD_MARSH[i_s]==0)  				//$$$$ 13_04_07 если была одна выдача
+									{
+										MARSHRUT_ST[i_s][s_m].T_VYD=0;		//$$$$
+										MARSHRUT_ST[i_s][s_m].SOST=MARSHRUT_ST[i_s][s_m].SOST&0x7; //$$$$
+										KOL_VYD_MARSH[i_s]++;				//SSSS
+										TUMS_RABOT[i_s]=0;					//SSSS
+										KOMANDA_TUMS[i_s][10]=0;			//SSSS
+									}
+									else
+									{
+										add(i_m,8888,40);
+										DeleteMarsh(i_m);//удалить маршрут
+										return;//прекратить анализы маршрутов
+									}
+								}
+							}
+						}
+						else //если маршрут воспринят
+						{
+							//пройти по всем стрелкам воспринятого маршрута
+							for(ik=0;ik<10;ik++)
+							{ //получить очередную стрелку
+								ob_str=MARSHRUT_ALL[i_m].STREL[i_s][ik]&0xfff;
+								polojen=MARSHRUT_ALL[i_m].STREL[i_s][ik]&0x1000;
+								if(ob_str==0)continue;//если ее нет, идти дальше
+								read_FR3(ob_str); //прочитать состояние стрелки
+								//если стрелка без контроля - прервать просмотр
+								if(FR3[1]==FR3[3])
+							break; //без контроля - бросить анализ стрелок
+								if(polojen==0)//если нужна в плюсе
+								{
+									if((FR3[1]!=1)||(FR3[3]!=0))
+							break; //не в плюсе - бросить стрелки
+								}
+								else //если нужна в минусе
+								{
+									if((FR3[1]!=0)||(FR3[3]!=1))
+							break; //не в минусе - бросить стрелки
+								}
+							}
+							if(ik>=10) //если все стрелки установлены (маршрут выполнен)
+							{
+								//установить для локального - норму завершения
+								MARSHRUT_ST[i_s][s_m].SOST=
+								MARSHRUT_ST[i_s][s_m].SOST|0x3f;
+							}
+							else //если стрелки не готовы
+							{
+								MARSHRUT_ST[i_s][s_m].SOST=
+								(MARSHRUT_ST[i_s][s_m].SOST&0xC0)|0x1f; //хранить восприятие
+								if((T_TIME-MARSHRUT_ST[i_s][s_m].T_VYD)> //если превышен макс.
+								MARSHRUT_ST[i_s][s_m].T_MAX)
+								{
+									add(i_m,8888,41);
+									DeleteMarsh(i_m);
+									return;
+								}
+							}
+						}
+						Sost=(Sost&MARSHRUT_ST[i_s][s_m].SOST);// новое состояние и прерваться
+				break; // бросить анализ локальных в этой стойке для этого глобального
 					}
 				}
-				mars_st++;
 			}
 		}
 
-		 //если в маршрут входит хотя бы одна стойка
-		if(mars_st!=0)
+		if(mars_st!=0)//если в маршрут входит хотя бы одна стойка
 		{
+			MARSHRUT_ALL[i_m].SOST=kateg|Sost; //формируем вклад стойки в глоб.знач.
 			//если состояние маршрута = удачное завершение
 			if((Sost&0x3F)==0x3f)
 			{
 				 //если завершился предварительный маршрут
-				if(kateg==0x40) {PovtorMarsh(i_m); return; }
-
+				if(kateg==0x40)	{PovtorMarsh(i_m);continue;}
 				else //если был исполнительный маршрут
 				{
 					add(i_m,8888,26);
 					DeleteMarsh(i_m);
-					return;
+					continue;
 				}
 			}
-			//если иное состояние
 			else
-
 			//если состояние неудачное
 			if((Sost&0x3f)==0x1)
 			{
-				Soob_For_Arm(0,i_m,0);
 				add(i_m,8888,21);
+				Soob_For_Arm(ii,MARSHRUT_ALL[i_m].NACH,ii);
 				DeleteMarsh(i_m);
 				return;
-			}
-
-			//если иное состояние
-			else
-			//если маршрут расфасован не полностью
-			if((Sost&0x3f)==0x3)
-			{
-				unsigned int NACH=MARSHRUT_ALL[i_m].NACH;
-				int END=MARSHRUT_ALL[i_m].END;
-				int NSTR=MARSHRUT_ALL[i_m].NSTR;
-				unsigned long POL=MARSHRUT_ALL[i_m].POL_STR;
-				switch(MARSHRUT_ALL[i_m].KMND)
-				{
-					case 'a': KOM=191; break;
-					case 'b': KOM=192; break;
-					case 'd': KOM=71; break;
-					default:  add(i_m,8888,22);DeleteMarsh(i_m); return;
-				}
-				RASFASOVKA=0xF;
-				if((MARSHRUT_ALL[i_m].SOST&0xc0)==0x80)
-				{
-					flag_err++;
-				}
-				ii=ANALIZ_MARSH(KOM,NACH,END,NSTR,POL);
-				if(ii<(Nst*3))TUMS_MARSH(ii);
-				else
-				{
-					Soob_For_Arm(0,ii,0);
-					add(i_m,8888,23);
-					DeleteMarsh(i_m);
-					return;
-				}
-				RASFASOVKA=0;
-			}
-			//если иное состояние
-			else
-			//если маршрут выдан в стойки,но не воспринят
-			if((Sost&0x3f)==0xF)
-			{
-				ISPOLNIT[i_m]=0;
-				for(i_s=0;i_s<Nst;i_s++) //пройти по всем стойкам
-				for(s_m=0;s_m<3;s_m++) //пройти по всем локальным маршрутам
-				{
-					if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m) //если есть такой маршрут
-					{
-						if(MARSHRUT_ST[i_s][s_m].T_VYD!=0)//если он не выдавался
-						{
-							t_tek=time(NULL);
-							Delta=difftime(t_tek,MARSHRUT_ST[i_s][s_m].T_VYD);
-							if(Delta>5)
-							{
-								Soob_For_Arm(0,i_m,0);
-								i_m=MARSHRUT_ST[i_s][s_m].NUM-100;
-								add(i_m,8888,24);
-								DeleteMarsh(i_m);
-								return;
-							}
-						}
-					}
-				}
-			}
-			//если иное состояние
-			else
-			//если воспринят стойкой, но не исполнен
-			if((Sost&0x3f)==0x1f)
-			{ //пройти по всем стойкам
-				for(i_s=0;i_s<Nst;i_s++)
-				// по всем локальным
-				for(s_m=0;s_m<3;s_m++)
-				// если найден этот маршрут
-				if((MARSHRUT_ST[i_s][s_m].NUM-100)==i_m)
-				{
-					//если выдавался
-					if(MARSHRUT_ST[i_s][s_m].T_VYD!=0)
-					{
-						t_tek=time(NULL);
-						Delta=difftime(t_tek,MARSHRUT_ST[i_s][s_m].T_VYD);
-						if(Delta>MARSHRUT_ST[i_s][s_m].T_MAX)
-						{
-							Soob_For_Arm(0,i_m,0);
-							i_m=MARSHRUT_ST[i_s][s_m].NUM-100;
-							add(i_m,8888,25);
-							DeleteMarsh(i_m);
-							return;
-						}
-					}
-				}
 			}
 		}
 	}
 }
 //==================================================================
+//Повтор маршрута для формирования команды после установки стрелок
 void PovtorMarsh(int i_m)
 {
 	int ii;
 	char KMND;
-	unsigned int NACH=MARSHRUT_ALL[i_m].NACH;
-	int END=MARSHRUT_ALL[i_m].END;
-	int NSTR=MARSHRUT_ALL[i_m].NSTR;
-	unsigned long POL=MARSHRUT_ALL[i_m].POL_STR;
-	for(ii=0;ii<Nst;ii++)
+	unsigned int NACH=MARSHRUT_ALL[i_m].NACH; //взять начало маршрута
+	int END=MARSHRUT_ALL[i_m].END; //взять конец маршрута
+	int NSTR=MARSHRUT_ALL[i_m].NSTR;//взять число стрелок
+	unsigned long POL=MARSHRUT_ALL[i_m].POL_STR; //взять положение стрелок
+	for(ii=0;ii<Nst;ii++) //пройти по всем стойкам
 	{
 		//если выдана маршрутная команда, то пока нет реакции - выходить
 		if(MARSH_VYDAN[ii]!=0)return;
 	}
-	switch(MARSHRUT_ALL[i_m].KMND)
+	switch(MARSHRUT_ALL[i_m].KMND) //сформировать команду
 	{
 		case 'a': KMND=191; break;
 		case 'b': KMND=192; break;
 		case 'd': KMND=71; break;
 		default:  break;
 	}
-	add(i_m,8888,20);
-	RASFASOVKA=0xF;
-  ii=ANALIZ_MARSH(KMND,NACH,END,NSTR,POL);
-  if(ii<Nst*3)TUMS_MARSH(ii);
-	else
-  {
-    Soob_For_Arm(0,ii,0);
-  }
-  RASFASOVKA=0;
-  return;
+	add(i_m,8888,20); //записать, что выдаем с открытием
+	DeleteMarsh(i_m); //удалить старый маршрут из таблицы
+	ii=ANALIZ_MARSH(KMND,NACH,END,NSTR,POL); //провести анализ
+	if(ii<Nst*3)TUMS_MARSH(ii);//если маршрут вписался в таблицу - задать в ТУМСы
+	return;
 }
 //=========================================================================
 /****************************************************\
@@ -1216,13 +995,13 @@ void PovtorMarsh(int i_m)
 \****************************************************/
 int ANALIZ_ST_IN_PUT(int nom_tras,int kom,int st,int marsh,int ind)
 {
-  int ii,Error;
-  long DT;
-  int str_in_put,sp_in_put,spar_str,spar_sp,pol_str,tms_str;
-  ii=nom_tras;
-  Error=0;
-  if((TRASSA[ii].tip==7)&&(kom==98))
-  {
+	int ii,Error;
+	long DT;
+	int str_in_put,sp_in_put,spar_str,spar_sp,pol_str,tms_str;
+	ii=nom_tras;
+	Error=0;
+	if((TRASSA[ii].tip==7)&&(kom==98))
+	{
   	READ_BD(TRASSA[ii].object);
     //если зависимость не для поездного маршрута или маршрут не поездной
     if((bd_osn[1]!=15)||(kom!=98))return 0;
@@ -1238,11 +1017,11 @@ int ANALIZ_ST_IN_PUT(int nom_tras,int kom,int st,int marsh,int ind)
       read_FR3(str_in_put);
     	if((FR3[1]!=1)||(FR3[3]!=0))
 			{
-        MARSHRUT_ALL[marsh].KOL_STR[tms_str]++;
-        MARSHRUT_ALL[marsh].STREL[tms_str][ind++]=str_in_put;
-        MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST&0xc0;
-        MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST|0x3;
-        read_FR3(sp_in_put);
+				MARSHRUT_ALL[marsh].KOL_STR[tms_str]++;
+				MARSHRUT_ALL[marsh].STREL[tms_str][ind++]=str_in_put;
+				MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST&0xc0;
+				MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST|0x3;
+				read_FR3(sp_in_put);
 				if((FR3[1]==0)&& //если свой СП в норме
 				(FR3[3]==0)&&
 				(FR3[5]==0)&&
@@ -1272,25 +1051,25 @@ int ANALIZ_ST_IN_PUT(int nom_tras,int kom,int st,int marsh,int ind)
 										add(marsh,8888,16);
 										DeleteMarsh(marsh);
 										POOO[str_in_put]=0l;
-                  	Error=1015;
+										Error=1015;
 									}
-              	}
-            	}
-              else Error=1015; //если СП пары не в норме
-            }
-            else  Error=1015; //если свой СП не в норме
-          } //если нет парной стрелки
-          else
-          {
-            if(POOO[str_in_put]==0l)
-            {
-          	  perevod_strlk(107,str_in_put);
-              POOO[str_in_put]=time(NULL);
-            }
-            else
-            {
-              DT=time(NULL)-POOO[str_in_put];
-              if(DT>40l)
+								}
+							}
+							else Error=1015; //если СП пары не в норме
+						}
+						else  Error=1015; //если свой СП не в норме
+					} //если нет парной стрелки
+					else
+					{
+						if(POOO[str_in_put]==0l)
+						{
+							perevod_strlk(107,str_in_put);
+							POOO[str_in_put]=time(NULL);
+						}
+						else
+						{
+							DT=time(NULL)-POOO[str_in_put];
+							if(DT>40l)
               {
 								add(marsh,8888,17);
 								DeleteMarsh(marsh);
@@ -1303,16 +1082,16 @@ int ANALIZ_ST_IN_PUT(int nom_tras,int kom,int st,int marsh,int ind)
         else  Error=1015;//если свой СП не в норме
       }
 		}//конец плюсового положения стрелки
-    if(pol_str==1)//если стрелка должна быть в минусе
-    {
-      read_FR3(str_in_put);
-      if((FR3[3]!=1)||(FR3[1]!=0))//если стрелка не в минусе
-      {
+		if(pol_str==1)//если стрелка должна быть в минусе
+		{
+			read_FR3(str_in_put);
+			if((FR3[3]!=1)||(FR3[1]!=0))//если стрелка не в минусе
+			{
 				MARSHRUT_ALL[marsh].KOL_STR[tms_str]++;
-        MARSHRUT_ALL[marsh].STREL[tms_str][ind++]=str_in_put;
-        MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST&0xc0;
-        MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST|0x3;
-        read_FR3(sp_in_put);
+				MARSHRUT_ALL[marsh].STREL[tms_str][ind++]=str_in_put|0x1000;
+				MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST&0xc0;
+				MARSHRUT_ALL[marsh].SOST=MARSHRUT_ALL[marsh].SOST|0x3;
+				read_FR3(sp_in_put);
         if((FR3[1]==0)&& //если свой СП в норме
         (FR3[3]==0)&&
         (FR3[5]==0)&&
@@ -1354,20 +1133,157 @@ int ANALIZ_ST_IN_PUT(int nom_tras,int kom,int st,int marsh,int ind)
             else
             {
               DT=time(NULL)-POOO[str_in_put];
-              if(DT>40l)
+							if(DT>40l)
               {
 								add(marsh,8888,19);
 								DeleteMarsh(marsh);
 								POOO[str_in_put]=0l;
-                Error=1015;
-              }
-            }
-          }
-        }
-        else Error=1015;//если свой СП не в норме
-      }
-    }//конец анализа стрелки в минусе
-  }//конец анализа объектов
-  return Error;
+								Error=1015;
+							}
+						}
+					}
+				}
+				else Error=1015;//если свой СП не в норме
+			}
+		}//конец анализа стрелки в минусе
+	}//конец анализа объектов
+	return Error;
 }
-//-----------------------------------------------
+//===============================================================
+//Анализ признаков состояния работы стоек с маршрутами по данным,
+//принятым из стойки, здесь PODGR - байт с данными о MYTHX
+ANALIZ_MYTHX(unsigned char PODGR)
+{
+	int svoi,tum,s_m,nom,ik,ob_str,ijk;
+	char sym_myt;
+	unsigned char prov;
+	 //если это не MYTHX, а квитанция , то выйти
+	if(((PODGR<0x59)||(PODGR>0x7C))&&(PODGR!=0x6E))return;
+
+	svoi=0;//изначально считаем, что MYTHX чужой
+
+	if(ACTIV!=1)//если сервер пассивный, то меняем по данным стойки
+							//текущее действующее значение
+	{
+		switch(PODGR&0xF)
+		{
+			case 0x9: MYTHX_TEC[ST-1]=0x50;break;
+			case 0xA: MYTHX_TEC[ST-1]=0x60;break;
+			case 0xC: MYTHX_TEC[ST-1]=0x70;break;
+			default: break;
+		}
+	}
+
+	tum=ST-1;
+
+	//переключатель по действующему для стойки маршруту
+	switch(MYTHX_TEC[tum])
+	{
+		//если действуует 1-ый маршрут и стойка доложила о первом,то свой
+		case 0x50: if((PODGR&0xf)==0x9)svoi=0xf;break;
+
+		//если действует 2-ой и стойка доложила о втором, то свой
+		case 0x60: if((PODGR&0xf)==0xA)svoi=0xf;break;
+
+		//если нет никакого, то все свои
+		case 0x6e:
+		case 0:     svoi=0xf;break;
+
+			//если действует 3-ий и стойка доложила о третьем, то свой
+		case 0x70: if((PODGR&0xf)==0xC)svoi=0xf;
+							 else
+								if(PODGR==0x6e)svoi=0xf;
+								svoi=0xf;
+		default: break;
+	}
+
+	if(svoi!=0)//если свой
+	{
+		//если изменился
+		if(MYTHX[tum]!=PODGR)MARSH_VYDAN[tum]=0; //снять признак раздачи маршрута
+
+		for(s_m=0;s_m<MARS_STOY;s_m++) // пройти по всем маршрутам стойки
+		{
+			//выделить MYTHX из подгруппы и наложить на MYTHX команды
+			// в 12 - ом байте лежит MYTHX, с которым шла команда
+			// в подгруппе в младшем полубайте лежит MYTHX действующий в ТУМСе
+			// 59 - 1ый выдан и первый в работе
+			// 6A - второй выдан и второй в работе
+			// 7C - третий выдан и третий в работе
+			prov=MARSHRUT_ST[tum][s_m].NEXT_KOM[12]|(PODGR&0xf);
+			// если миф в стойке соответствует выданному в команде
+			if((prov==0x59)||(prov==0x6A)||(prov==0x7C))
+			{
+				switch(PODGR&0xF0)
+				{            //маршрут в работе
+										 //установить состояние восприятия и убрать команду
+					case 0x70: MARSHRUT_ST[tum][s_m].SOST=
+										 (MARSHRUT_ST[tum][s_m].SOST&0xC0)|0x1f;
+										 for(ijk=0;ijk<15;ijk++)KOMANDA_TUMS[tum][ijk]=0;
+										 TUMS_RABOT[tum]=0xf; //выставить флаг ТУМС в работе
+										 break;
+
+										 //неудачное окончание
+					case 0x50: MARSHRUT_ST[tum][s_m].SOST=0x1; //установить неудачу
+										 //сбросить команду
+										 for(ijk=0;ijk<15;ijk++)KOMANDA_TUMS[tum][ijk]=0;
+										 //убрать флаг ТУМС в работе
+										 TUMS_RABOT[tum]=0;
+										 break;
+
+										 //удачное окончание
+					case 0x60: MARSHRUT_ST[tum][s_m].SOST=
+										 (MARSHRUT_ST[tum][s_m].SOST&0xC0)|0x1f;
+										 for(ijk=0;ijk<15;ijk++)KOMANDA_TUMS[tum][ijk]=0;
+										 TUMS_RABOT[tum]=0;
+										 break;
+
+						default: break;
+				}
+				break;
+			}
+			else //если мифы не соответствуют
+			{
+				switch(PODGR&0xF0)
+				{
+					case 0x70: TUMS_RABOT[tum]=0xf;break; //стойка занята
+
+					case 0x50: TUMS_RABOT[tum]=0;break;
+
+					case 0x60: TUMS_RABOT[tum]=0; break;
+
+					default: break;
+				}
+				if(PODGR==0x6e)TUMS_RABOT[tum]=0; //стойка перезагрузилась
+
+			}
+		}
+	}
+
+	if(svoi!=0)MYTHX[tum]=PODGR; //если был свой MYTHX, запомнить его
+
+	if(MYTHX[tum]==0)MYTHX[tum]=PODGR;//если первый прием - запомнить
+
+	switch(MYTHX[tum]&0xf)
+	{
+		case 0x9: sym_myt='1';break;
+		case 0xA: sym_myt='2';break;
+		case 0xC: sym_myt='3';break;
+		default:  sym_myt=MYTHX[tum];break;
+	}
+	switch(MYTHX[tum]&0xf0)//переключатель по состоянию стойки
+	{
+		case 0x70:	putch1(sym_myt,14,66+tum,50);break; //в работе
+		case 0x60:  putch1(sym_myt,10,66+tum,50);break; // удачный конец
+		case 0x50:  putch1(sym_myt,12,66+tum,50); break;// неудачный конец
+			default:  putch1(sym_myt,140,66+tum,50); break;// неудачный конец
+	}
+	switch(MYTHX_TEC[tum]&0xf0)//переключатель по состоянию маршрута
+	{
+		case 0x70:	putch1('3',14,66+tum,49); break; //задан третий
+		case 0x60:  putch1('2',10,66+tum,49); break; //задан второй
+		case 0x50:  putch1('1',12,66+tum,49); break;// задан первый
+			default:	putch1('?',140,66+tum,49);break; //задано нечто
+	}
+	return;
+}

@@ -12,5 +12,7 @@
 #define WORK 1
 #define ARM_SHN 9 //номер АРМа ШН
 #define PEREDANO 0x1F  // маска передачи в имеющиеся АРМы
-#define TEST 1
+//#define TEST 1
+#define MARS_STOY 6
+//#define TEST2 1
 #define MAX_NEW 40

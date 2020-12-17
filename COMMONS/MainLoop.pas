@@ -690,21 +690,15 @@ try
   c := FR7[Index];
   if c > 0 then
   begin
-    // получить номер стойки
-    u := c and $f0000000; u := u shr 28;
-    // получить номер контроллера
-    m := c and $0c000000; m := m shr 26;
-    // получить код платы
-    p := c and $03c00000; p := p shr 22;
+    u := c and $f0000000; u := u shr 28; // получить номер стойки
+    m := c and $0c000000; m := m shr 26; // получить номер контроллера
+    p := c and $03c00000; p := p shr 22; // получить код платы
     t := (c and $02000000) = $02000000; // тип платы (М201-true/М203-false)
-    // получить характер отказа
-    o := c and $003f0000; o := o shr 16;
-    // получить параметр
-    z := c and $0000ffff;
+    o := c and $003f0000; o := o shr 16; // получить характер отказа
+    z := c and $0000ffff; // получить параметр
     if (u > 0) and (p > 0) and (o > 0) then
     begin
-      s := 'УВК'+ IntToStr(u)+
-           ' МПСУ'+ IntToStr(m);
+      s := 'УВК'+ IntToStr(u)+' МПСУ'+ IntToStr(m);
       if t then s := s + ' М201' else s := s + ' М203';
       s := s + '.' + IntToStr(p and $7);
       case o of
@@ -717,7 +711,6 @@ try
       end;
       s := s + '['+ IntToHEX(z,4)+']';
       AddFixMessage('Сообщение диагностики '+ s,4,4);
-
       DateTimeToString(dt,'dd-mm-yy hh:nn:ss', LastTime);
       s := dt + ' > '+ s;
       ListDiagnoz := dt + ' > ' + s + #13#10 + ListDiagnoz;
@@ -5532,31 +5525,38 @@ try
   ObjZav[Ptr].bParam[7]  := GetFR3(ObjZav[Ptr].ObjConstI[7],ObjZav[Ptr].bParam[32],ObjZav[Ptr].bParam[31]);  //К
   ObjZav[Ptr].bParam[11] := GetFR3(ObjZav[Ptr].ObjConstI[9],ObjZav[Ptr].bParam[32],ObjZav[Ptr].bParam[31]);  //РУ
   ObjZav[Ptr].bParam[12] := GetFR3(ObjZav[Ptr].ObjConstI[10],ObjZav[Ptr].bParam[32],ObjZav[Ptr].bParam[31]); //оУ
+
   otu := GetFR3(ObjZav[Ptr].ObjConstI[11],ObjZav[Ptr].bParam[32],ObjZav[Ptr].bParam[31]); //оТУ
   rotu := GetFR3(ObjZav[Ptr].ObjConstI[12],ObjZav[Ptr].bParam[32],ObjZav[Ptr].bParam[31]); //РоТУ
 
-  // получить состояние занятости стойки в маршрутной команде
+  //------------------- получить состояние занятости стойки в маршрутной команде
   i := ObjZav[Ptr].ObjConstI[8] div 8;
   if i > 0 then
   begin
     myt := FR3[i] and $38;
     if myt = $38 then
-    begin // выполняется установка маршрута
-      ObjZav[Ptr].bParam[8] := true; ObjZav[Ptr].bParam[9] := false; ObjZav[Ptr].bParam[10] := false;
+    begin //------------------------------------- выполняется установка маршрута
+      ObjZav[Ptr].bParam[8] := true;
+      ObjZav[Ptr].bParam[9] := false;
+      ObjZav[Ptr].bParam[10] := false;
     end else
     begin
       ObjZav[Ptr].bParam[8] := false;
       if myt = $28 then
-      begin // успешное завершение устаноки маршрута
-        ObjZav[Ptr].bParam[9] := true; ObjZav[Ptr].bParam[10] := false;
+      begin //---------------------------- успешное завершение устаноки маршрута
+        ObjZav[Ptr].bParam[9] := true;
+        ObjZav[Ptr].bParam[10] := false;
       end else
-      begin // неудачное завершение установки маршрута
-        ObjZav[Ptr].bParam[9] := false; ObjZav[Ptr].bParam[10] := true;
+      begin //-------------------------- неудачное завершение установки маршрута
+        ObjZav[Ptr].bParam[9] := false;
+        ObjZav[Ptr].bParam[10] := true;
       end;
     end;
   end;
 
-  a := false; b := false; p := false;
+  a := false;
+  b := false;
+  p := false;
 
   if ObjZav[Ptr].VBufferIndex > 0 then
   begin
@@ -5564,76 +5564,102 @@ try
     OVBuffer[ObjZav[Ptr].VBufferIndex].Param[1] := ObjZav[Ptr].bParam[32];
     if ObjZav[Ptr].bParam[31] and not ObjZav[Ptr].bParam[32] then
     begin
-
       if kp1 <> ObjZav[Ptr].bParam[5] then
-      begin // неисправно основное питание стойки
+      begin //------------------------------- неисправно основное питание стойки
         if WorkMode.FixedMsg then
         begin
           if kp1 then
           begin
-            InsArcNewMsg(Ptr,493+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,493,ObjZav[Ptr].Liter),4,4); {$ENDIF}
+            InsArcNewMsg(Ptr,493+$3000);
+            {$IFDEF RMDSP}
+              AddFixMessage(GetShortMsg(1,493,ObjZav[Ptr].Liter),4,4);
+            {$ENDIF}
           end;
         end;
       end;
       ObjZav[Ptr].bParam[5] := kp1;
 
       if kp2 <> ObjZav[Ptr].bParam[6] then
-      begin // неисправно резервное питание стойки
+      begin //------------------------------ неисправно резервное питание стойки
         if WorkMode.FixedMsg then
         begin
           if kp2 then
           begin
-            InsArcNewMsg(Ptr,494+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,494,ObjZav[Ptr].Liter),4,4); {$ENDIF}
+            InsArcNewMsg(Ptr,494+$3000);
+            {$IFDEF RMDSP}
+              AddFixMessage(GetShortMsg(1,494,ObjZav[Ptr].Liter),4,4);
+            {$ENDIF}
           end;
         end;
       end;
       ObjZav[Ptr].bParam[6] := kp2;
 
       if ao <> ObjZav[Ptr].bParam[2] then
-      begin // остановка 1 комплекта МПСУ
+      begin //--------------------------------------- остановка 1 комплекта МПСУ
         if WorkMode.FixedMsg then
         begin
           a := true;
           if ao then
-          begin // остановлен комплект
-            InsArcNewMsg(Ptr,366+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,366,ObjZav[Ptr].Liter),4,4); {$ENDIF}
+          begin //------------------------------------------ остановлен комплект
+            InsArcNewMsg(Ptr,366+$3000);
+            {$IFDEF RMDSP}
+              AddFixMessage(GetShortMsg(1,366,ObjZav[Ptr].Liter),4,4);
+             {$ENDIF}
           end else
           begin // включен комплект
-            InsArcNewMsg(Ptr,367+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,367,ObjZav[Ptr].Liter),5,0); {$ENDIF}
+            InsArcNewMsg(Ptr,367+$3000);
+            {$IFDEF RMDSP}
+              AddFixMessage(GetShortMsg(1,367,ObjZav[Ptr].Liter),5,0);
+            {$ENDIF}
           end;
         end;
       end;
+
       ObjZav[Ptr].bParam[2] := ao;
       if ar <> ObjZav[Ptr].bParam[3] then
-      begin // остановка 2 комплекта МПСУ
+      begin //--------------------------------------- остановка 2 комплекта МПСУ
         if WorkMode.FixedMsg then
         begin
           b := true;
           if ar then
-          begin // остановлен комплект
-            InsArcNewMsg(Ptr,368+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,368,ObjZav[Ptr].Liter),4,4); {$ENDIF}
+          begin //------------------------------------------ остановлен комплект
+            InsArcNewMsg(Ptr,368+$3000);
+            {$IFDEF RMDSP}
+              AddFixMessage(GetShortMsg(1,368,ObjZav[Ptr].Liter),4,4);
+            {$ENDIF}
           end else
-          begin // включен комплект
-            InsArcNewMsg(Ptr,369+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,369,ObjZav[Ptr].Liter),5,0); {$ENDIF}
+          begin //--------------------------------------------- включен комплект
+            InsArcNewMsg(Ptr,369+$3000);
+            {$IFDEF RMDSP}
+              AddFixMessage(GetShortMsg(1,369,ObjZav[Ptr].Liter),5,0);
+            {$ENDIF}
           end;
         end;
       end;
+
       ObjZav[Ptr].bParam[3] := ar;
       if ObjZav[Ptr].ObjConstB[1] then
       begin
         if otu <> ObjZav[Ptr].bParam[13] then
-        begin // изменение состояния интерфейса ОТУ
+        begin //----------------------------- изменение состояния интерфейса ОТУ
           if WorkMode.FixedMsg then
           begin
             if otu then
-            begin // остановлен интерфейс ОТУ комплекта
-              InsArcNewMsg(Ptr,500+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,500,ObjZav[Ptr].Liter),4,4); {$ENDIF}
+            begin //------------------------- остановлен интерфейс ОТУ комплекта
+              InsArcNewMsg(Ptr,500+$3000);
+              {$IFDEF RMDSP}
+                AddFixMessage(GetShortMsg(1,500,ObjZav[Ptr].Liter),4,4);
+              {$ENDIF}
             end else
-            begin // включен интерфейс ОТУ комплекта
-              InsArcNewMsg(Ptr,501+$3000); {$IFDEF RMDSP} AddFixMessage(GetShortMsg(1,501,ObjZav[Ptr].Liter),5,0); {$ENDIF}
+            begin //---------------------------- включен интерфейс ОТУ комплекта
+              InsArcNewMsg(Ptr,501+$3000);
+              {$IFDEF RMDSP}
+                AddFixMessage(GetShortMsg(1,501,ObjZav[Ptr].Liter),5,0);
+              {$ENDIF}
             end;
           end;
         end;
+
         if rotu <> ObjZav[Ptr].bParam[14] then
         begin // изменение состояния интерфейса РОТУ
           if WorkMode.FixedMsg then

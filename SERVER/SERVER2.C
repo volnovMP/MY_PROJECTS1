@@ -14,32 +14,32 @@
 void main(void)
 {
 	int ii,jj,kk,i,j,k;
-  unsigned char vvod;
+	unsigned char vvod;
 	char FR3_ANA[34];
 //	int T1,T2;
 //	char DelTT[10];
 	int iNt;
-  ACTIV=0xF;
+	ACTIV=0xF;
 	T_fix=10890;T_zap=0;fixir=0;
-  //получить текущую дату
+	//получить текущую дату
 	rg.h.ah=4;
-  int86(0x1a,&rg,&rg);
-  if(rg.x.cflag==0) //если успешное чтение даты
-  {
+	int86(0x1a,&rg,&rg);
+	if(rg.x.cflag==0) //если успешное чтение даты
+	{
 
-    for(ii=0;ii<14;ii++)NAME_FILE[ii]=0;
-  //получение имени для архива приема из АРМа
-    strcpy(NAME_FILE,"RESULT//");
+		for(ii=0;ii<14;ii++)NAME_FILE[ii]=0;
+	//получение имени для архива приема из АРМа
+		strcpy(NAME_FILE,"RESULT//");
 
-    NAME_FILE[8]=((rg.h.dl&0xf0)>>4)|0x30;
-    NAME_FILE[9]=(rg.h.dl&0x0f)|0x30;
-    strcat(NAME_FILE,".in");
+		NAME_FILE[8]=((rg.h.dl&0xf0)>>4)|0x30;
+		NAME_FILE[9]=(rg.h.dl&0x0f)|0x30;
+		strcat(NAME_FILE,".in");
 		NAME_FILE[13]=0;
 		new_day=((rg.h.dl&0xf0)>>4)*10+(rg.h.dl&0xf);
 		old_day=new_day;
   }
 	else
-  {
+	{
 #ifdef TEST
 		strcpy(NAME_FILE,"RESULT//");
 	  NAME_FILE[8]=((0x10)>>4)|0x30;
@@ -55,7 +55,7 @@ void main(void)
 		exit(1);
 #endif
   }
-  //открытие или создание файла приема из АРМ
+	//открытие или создание файла приема из АРМ
 #ifdef ARM_ARHIV
 	file_arm_in=open(NAME_FILE,O_APPEND|O_RDWR,O_BINARY);
 	if(file_arm_in<0)
@@ -112,6 +112,21 @@ void main(void)
 // ----------------- Main CIKL -------------------------------------------
 met0:
 //	T1=mikrotiki();
+#ifndef WORK
+	ACTIV=1;
+#endif
+	if(CIKL_MAIN!=0)
+	{
+		CIKL_MAIN=0;
+		outportb(0x3fc,0);
+		outportb(0x2fc,0);
+	}
+	else
+	{
+		CIKL_MAIN=0xF;
+		outportb(0x3fc,1);
+		outportb(0x2fc,1);
+	}
 	if(T_zap>300)
 	{
 		fixir=0;
@@ -135,11 +150,27 @@ met0:
 	{
 		T_TIME=time(NULL);
 		FIR_time=SEC_time;
+#ifndef WORK
+	cikl_marsh=cikl_marsh+3;
+	cikl_arm++;
+	if(cikl_marsh>10)cikl_marsh=0;
+#endif
 	}
   //получение признака наличия незавершенных команд и маршрутов
-	if(cikl_marsh>=2)
+#ifndef WORK
+	if(cikl_marsh>1)
+#else
+	if(cikl_marsh>8)
+#endif
 	MARSH_GLOB_LOCAL();
-
+#ifndef WORK
+	if((cikl_marsh%2)==0)
+	if(END_TUMS==0)
+	{
+    T_TIME = T_TIME + 19;
+		TIMER_TIC();
+	}
+#endif
 	FLAG_KOM=0;
 //  FLAG_KOM=FLAG_KOM+MARSHRUT+MARSHRUT1;
 	for(ii=0;ii<Narm;ii++)
@@ -152,15 +183,17 @@ met0:
 
 
 		}
-	for(ii=0;ii<Nst;ii++)
-		for(jj=0;jj<15;jj++)
+		for(ii=0;ii<Nst;ii++)
 		{
-			FLAG_KOM=FLAG_KOM+KOMANDA_ST[ii][jj];
-			FLAG_KOM=FLAG_KOM+KOMANDA_TUMS[ii][jj];
-		}
-
+			for(jj=0;jj<15;jj++)
+			{
+				FLAG_KOM=FLAG_KOM+KOMANDA_ST[ii][jj];
+				FLAG_KOM=FLAG_KOM+KOMANDA_TUMS[ii][jj];
+			}
+	 }
 	 for(ii=0;ii<3;ii++)FLAG_KOM=FLAG_KOM+DIAGNOZ[ii];
 	 for(ii=0;ii<6;ii++)FLAG_KOM=FLAG_KOM+ERR_PLAT[ii];
+	 for(ii=0;ii<Nst*3;ii++)FLAG_KOM=FLAG_KOM+MARSHRUT_ALL[ii].NACH;
 
 	//перевод пассивного сервера в промежуточное состояние, если нет
 	//ответов от стоек и АРМа
@@ -180,13 +213,9 @@ met0:
 	 //если сервер активен, то выдать данные в АРМы
 	if(ACTIV==1)ARM_OUT();
 	else  if(cikl_arm>=2)cikl_arm=0;
-	if(cikl_marsh>=2)
-	{
-		if(RASFASOVKA==0)Analiz_Glob_Marsh();
-		cikl_marsh=0;
-	}
+	if(cikl_marsh>=9)Analiz_Glob_Marsh();
 	OSN_TUMS_IN(); //работа с возможным приемом основного канала
-  REZ_TUMS_IN(); //работа с возможным приемом резервного канала
+	REZ_TUMS_IN(); //работа с возможным приемом резервного канала
   consentr1(); //выполнить обработку данных
 //  TEST_MARSH();//проверка хода выполнения маршрутных команд
 /*$$$$$$$$$$$$$$$$$$$$$$$
@@ -203,8 +232,8 @@ met0:
   ANALIZ_ARM();      //анализ данных,принятых из АРМ
   ANALIZ_SHN();      //анализ данных из АРМ-ШН
 	VYVOD_ON_SCREEN(); //вывод на экран
-  PRIEM_SERV();      //обработка данных пассивного сервера
- 	if(tiki_tum[ZAPROS_TUMS-1]==32)//если маршрутный таймер истек
+	PRIEM_SERV();      //обработка данных пассивного сервера
+	if(tiki_tum[ZAPROS_TUMS-1]==32)//если маршрутный таймер истек
   {
 /*
 		if(MYTHX[ZAPROS_TUMS-1]==0x50)MARSH_GOT[ZAPROS_TUMS-1]=0; //маршрут готов
@@ -234,71 +263,84 @@ met0:
 	if(REGIM==ANAL_MARSH)
 	{
 		//вывод глобальных маршрутов
-		for(i=0;i<Nst*3;i++)
+		for(i=0;i<5;i++)
 		{
-			if(MARSHRUT_ALL[i].KMND!=0)
+			if(MARSHRUT_ALL[i].KMND==0)putch1('0',0xc,4,4+8*i);
+			else putch1(MARSHRUT_ALL[i].KMND,0xc,4,4+8*i);
+
+			if(MARSHRUT_ALL[i].NACH==0)puts1("      ",0xc,6,4+8*i);
+			else puts1(PAKO[MARSHRUT_ALL[i].NACH],0xc,6,4+8*i);
+
+			if(MARSHRUT_ALL[i].END==0)puts1("      ",0xc,15,4+8*i);
+			puts1(PAKO[MARSHRUT_ALL[i].END],0xc,15,4+8*i);
+
+			switch(MARSHRUT_ALL[i].SOST)
 			{
-				putch1(MARSHRUT_ALL[i].KMND,0xc,4,4+i);
-				puts1(PAKO[MARSHRUT_ALL[i].NACH],0xc,6,4+i);
-				puts1(PAKO[MARSHRUT_ALL[i].END],0xc,15,4+i);
-				switch(MARSHRUT_ALL[i].SOST)
+				case 0x43:	puts1("ПН",0xc,25,4+8*i);break;
+				case 0x47:	puts1("ПР",0xc,25,4+8*i);break;
+				case 0x4F:	puts1("ПВ",0xc,25,4+8*i);break;
+				case 0x5F:	puts1("ПП",0xc,25,4+8*i);break;
+				case 0x7F:  puts1("ПУ",0xc,25,4+8*i);break;
+				case 0x41:	puts1("ПО",0xc,25,4+8*i);break;
+				case 0x83:	puts1("ОН",0xc,25,4+8*i);break;
+				case 0x87:	puts1("ОР",0xc,25,4+8*i);break;
+				case 0x8F:	puts1("ОВ",0xc,25,4+8*i);break;
+				case 0x9F:	puts1("ОП",0xc,25,4+8*i);break;
+				case 0xbF:  puts1("ОУ",0xc,25,4+8*i);break;
+				case 0x81:	puts1("ОО",0xc,25,4+8*i);break;
+				default:	  puts1("??",0xc,25,4+8*i);break;
+			}
+			for(jj=0;jj<Nst;jj++)
+			{
+				for(kk=0;kk<3;kk++)
 				{
-					case 0x43:	puts1("ПН",0xc,25,4+i);break;
-					case 0x47:	puts1("ПР",0xc,25,4+i);break;
-					case 0x4F:	puts1("ПВ",0xc,25,4+i);break;
-					case 0x5F:	puts1("ПП",0xc,25,4+i);break;
-					case 0x7F:  puts1("ПУ",0xc,25,4+i);break;
-					case 0x41:	puts1("ПО",0xc,25,4+i);break;
-          case 0x83:	puts1("ОН",0xc,25,4+i);break;
-					case 0x87:	puts1("ОР",0xc,25,4+i);break;
-          case 0x8F:	puts1("ОВ",0xc,25,4+i);break;
-          case 0x9F:	puts1("ОП",0xc,25,4+i);break;
-					case 0xbF:  puts1("ОУ",0xc,25,4+i);break;
-          case 0x81:	puts1("ОО",0xc,25,4+i);break;
-          default:	puts1("??",0xc,25,4+i);break;
-        }
-        for(j=0;j<Nst;j++)
-        {
-         	for(k=0;k<3;k++)
-        	if((MARSHRUT_ST[j][k].NUM-100)==i)
-         	{
-         		MARSHRUT_ST[j][k].NEXT_KOM[12]=0;
-           	puts1(MARSHRUT_ST[j][k].NEXT_KOM,0xa,44,4+i+k);
-            switch(MARSHRUT_ST[j][k].SOST)
-            {
-             	case 0x47:	puts1("ПР",0xa,60,4+i+k);break;
-							case 0x4f:	puts1("ПВ",0xa,60,4+i+k);break;
-              case 0x5f:	puts1("ПП",0xa,60,4+i+k);break;
-              case 0x7f:	puts1("ПУ",0xa,60,4+i+k);break;
-              case 0x41:	puts1("ПО",0xa,60,4+i+k);break;
-							case 0x87:	puts1("ОР",0xa,60,4+i+k);break;
-							case 0x8f:	puts1("ОВ",0xa,60,4+i+k);break;
-              case 0x9f:	puts1("ОП",0xa,60,4+i+k);break;
-              case 0xbf:	puts1("ОУ",0xa,60,4+i+k);break;
-              case 0x81:	puts1("ОО",0xa,60,4+i+k);break;
-							default:	puts1("??",0xa,60,4+i+k);break;
-           	}
+					if((MARSHRUT_ST[jj][kk].NUM-100)==i)
+					{
+						MARSHRUT_ST[jj][kk].NEXT_KOM[13]=0;
+						puts1(MARSHRUT_ST[jj][kk].NEXT_KOM,0xa,44,4+4*jj+kk);
+						switch(MARSHRUT_ST[jj][kk].SOST)
+						{
+							case 0x47:	puts1("ПР",0xa,60,4+4*jj+kk);break;
+							case 0x4f:	puts1("ПВ",0xa,60,4+4*jj+kk);break;
+							case 0x5f:	puts1("ПП",0xa,60,4+4*jj+kk);break;
+							case 0x7f:	puts1("ПУ",0xa,60,4+4*jj+kk);break;
+							case 0x41:	puts1("ПО",0xa,60,4+4*jj+kk);break;
+							case 0x87:	puts1("ОР",0xa,60,4+4*jj+kk);break;
+							case 0x8f:	puts1("ОВ",0xa,60,4+4*jj+kk);break;
+							case 0x9f:	puts1("ОП",0xa,60,4+4*jj+kk);break;
+							case 0xbf:	puts1("ОУ",0xa,60,4+4*jj+kk);break;
+							case 0x81:	puts1("ОО",0xa,60,4+4*jj+kk);break;
+							default:    puts1("??",0xa,60,4+4*jj+kk);break;
+						}
 					}
-        }
-      }
+					else
+					{
+						if(MARSHRUT_ST[jj][kk].NUM==0)
+						{
+							puts1("            ",0xa,44,4+4*jj+kk);
+							puts1("??",0xa,60,4+4*jj+kk);
+						}
+					}
+				}
+			}
 		}
 	}
-  if(kbhit())  //если нажата клавиша
-  {
+	if(kbhit())  //если нажата клавиша
+	{
 #ifndef WORK
-    cikl_arm++; //для тестового режима
+		cikl_arm++; //для тестового режима
 #endif
 		vvod=getch(); //прочитать клавиатуру
-    if(vvod==0)
-    {
-      VVOD_OBJ=0;
-      OBJECT_ARM=0;
-      vvod=getch();
-      if(vvod==59)//F1-просмотр каналов
-      {
-        if(REGIM!=KANAL){REGIM=KANAL;tablica();vvod=0xff;}
-        else  { REGIM=0; main_win(); vvod=0xff; }
-      }
+		if(vvod==0)
+		{
+			VVOD_OBJ=0;
+			OBJECT_ARM=0;
+			vvod=getch();
+			if(vvod==59)//F1-просмотр каналов
+			{
+				if(REGIM!=KANAL){REGIM=KANAL;tablica();vvod=0xff;}
+				else  { REGIM=0; main_win(); vvod=0xff; }
+			}
       if(vvod==60)//F2-общий обзор объектов
       {
         if(REGIM!=OBJECT)
@@ -331,9 +373,9 @@ met0:
         }
       }
       if(vvod==63)//F5-просмотр принимаемых и передаваемых команд
-      {
+			{
         if(REGIM!=COMMAND){REGIM=COMMAND;win_comm();vvod=0xff;}
-        else
+				else
         {
           REGIM=0;
           main_win();
@@ -354,7 +396,7 @@ met0:
       {
         if(REGIM!=ANAL_MARSH)
         {
-      		win_marsh();
+					win_marsh();
         	REGIM=ANAL_MARSH;
       	}
         else
@@ -365,97 +407,134 @@ met0:
 			}
       if((vvod==68)&&(REGIM==ANALIZ))//если нажата F10
       {
-      	if(VVOD_OBJ==0)VVOD_OBJ=0xff;
-        else VVOD_OBJ=0;
+				puts1("ВВЕДИТЕ НОМЕР ОБЪЕКТА",0xf,1,47);
+				if(VVOD_OBJ==0)VVOD_OBJ=0xff;
+				else VVOD_OBJ=0;
 			}
 #ifdef TEST
       if(vvod==71)vvod_set=15;//Home - прямой ввод данных
       if(vvod_set==15)set_vvod();
 #endif
-      if(vvod==82)//ins
-      {
-        REGIM=0;
-      }
-      if(vvod==79) //если <End>
-      {
+			if(vvod==82)//ins
+			{
+				REGIM=0;
+			}
+			if(vvod==79) //если <End>
+			{
 //         FINAL();   //$#
 #ifndef TEST
-        if(ACTIV_SERV==SERVER)
-        {
-          putch1('А',0x8c,18,50);
-          putch1('К',0x8c,19,50);
-          putch1('Т',0x8c,20,50);
-          putch1('И',0x8c,21,50);
-          putch1('В',0x8c,22,50);
-          putch1('Н',0x8c,23,50);
-          putch1('Ы',0x8c,24,50);
-          putch1('Й',0x8c,25,50);
-        }
-        else
-        if((sosed_NEXT==0)||(sosed_PRED==0))
+				if(ACTIV_SERV==SERVER)
 				{
-          putch1('Н',0x8c,18,50);
-          putch1('Е',0x8c,19,50);
-          putch1('Л',0x8c,20,50);
-          putch1('Ь',0x8c,21,50);
-          putch1('З',0x8c,22,50);
-          putch1('Я',0x8c,23,50);
-          putch1('-',0x8c,24,50);
-          putch1('2',0x8c,25,50);
-        }
-        else
-#endif
-        {
-          FINAL();
-        }
-      }
-    }
-    else
-    {
-    	if((VVOD_OBJ!=0)&&(VVOD_OBJ!=0x15))
-      {
-        if((vvod==0xd)||(X_VVOD1>=5))
-        {
-          OBJECT_ARM=0;
-        	for(kk=0;kk<4;kk++)
-          {
-            if(NOMER_OB_ARM[kk]==0)break;
-						OBJECT_ARM=OBJECT_ARM*10+(NOMER_OB_ARM[kk]-48);
-          }
-          if(OBJECT_ARM>=KOL_VO)OBJECT_ARM=KOL_VO-1;
-          if(((inp_ob[OBJECT_ARM]&0xff)==0x20)&&
-            (((inp_ob[OBJECT_ARM]&0xff00)>>8)==0x20))OBJECT_SERV=0;
-          else  OBJECT_SERV=inp_ob[OBJECT_ARM];
-          X_VVOD1=1;
-          VVOD_OBJ=0x15;
+					putch1('А',0x8c,18,50);
+					putch1('К',0x8c,19,50);
+					putch1('Т',0x8c,20,50);
+					putch1('И',0x8c,21,50);
+					putch1('В',0x8c,22,50);
+					putch1('Н',0x8c,23,50);
+					putch1('Ы',0x8c,24,50);
+					putch1('Й',0x8c,25,50);
 				}
 				else
-        {
-          if(vvod==8)
-          {
-           if(X_VVOD1>1)X_VVOD1--;
-           NOMER_OB_ARM[X_VVOD1-1]=0;
-           putch1(0x20,0xf,X_VVOD1,48);
+				if((sosed_NEXT==0)||(sosed_PRED==0))  //$$$$ - 14_04_07 выход с паролем
+				{
+					putch1('П',0x8c,18,50);
+					putch1('А',0x8c,19,50);
+					putch1('Р',0x8c,20,50);
+					putch1('О',0x8c,21,50);
+					putch1('Л',0x8c,22,50);
+					putch1('Ь',0x8c,23,50);
+					putch1(':',0x8c,24,50);
+					PAROL = 1;
+				}
+				else
+#endif
+				{
+					FINAL();
+				}
+			}
+		}
+		else
+		{
+			if(PAROL!=0)             //$$$$ 14_04_07 ввод пароля
+			{
+			 if((PAROL!=0)&&(PAROL!=0x15))  //
+			 {
+					if((vvod==0xd)||(X_VVOD1>=4))
+					{
+						PAROL=0;
+						X_VVOD1=0;
+						for(kk=0;kk<4;kk++)
+						{
+							if(PAROL_TXT[kk]==0)break;
+
+						}
+						if(PAROL_TXT[0]=='o')
+							if(PAROL_TXT[1]=='r')
+								if(PAROL_TXT[2]=='s')
+									if(PAROL_TXT[3]=='k')FINAL();
 					}
-          else
-          {
-            if((vvod>=48)&&(vvod<=57))
-            {
-	      			putch1(vvod,0xf,X_VVOD1,48);
-  	      		NOMER_OB_ARM[X_VVOD1-1]=vvod;
-          		X_VVOD1++;
-          	}
-          }
+					else
+					{
+						if(vvod==8)
+						{
+							if(X_VVOD1>0)X_VVOD1--;
+							PAROL_TXT[X_VVOD1]=0;
+							putch1(0x20,0xf,X_VVOD1+24,50);
+						}
+						else
+						{
+							putch1('*',0xf,X_VVOD1+24,50);
+							PAROL_TXT[X_VVOD1]=vvod;
+							X_VVOD1++;
+						}
+					}
+				}
+			}
+			if((VVOD_OBJ!=0)&&(VVOD_OBJ!=0x15))
+			{
+				if((vvod==0xd)||(X_VVOD1>=5))
+				{
+					OBJECT_ARM=0;
+					for(kk=0;kk<4;kk++)
+					{
+						if(NOMER_OB_ARM[kk]==0)break;
+						OBJECT_ARM=OBJECT_ARM*10+(NOMER_OB_ARM[kk]-48);
+					}
+					if(OBJECT_ARM>=KOL_VO)OBJECT_ARM=KOL_VO-1;
+					if(OBJECT_ARM<=0)OBJECT_ARM=1;
+					if(((inp_ob[OBJECT_ARM]&0xff)==0x20)&&
+						(((inp_ob[OBJECT_ARM]&0xff00)>>8)==0x20))OBJECT_SERV=0;
+					else  OBJECT_SERV=inp_ob[OBJECT_ARM];
+					X_VVOD1=1;
+					VVOD_OBJ=0x15;
+				}
+				else
+				{
+					if(vvod==8)
+					{
+					 if(X_VVOD1>1)X_VVOD1--;
+					 NOMER_OB_ARM[X_VVOD1-1]=0;
+					 putch1(0x20,0xf,X_VVOD1,48);
+					}
+					else
+					{
+						if((vvod>=48)&&(vvod<=57))
+						{
+							putch1(vvod,0xf,X_VVOD1,48);
+							NOMER_OB_ARM[X_VVOD1-1]=vvod;
+							X_VVOD1++;
+						}
+					}
 				}
 			}
 		}
   }
-  if(VVOD_OBJ==0x15)
-  {
-  	puts1(PAKO[OBJECT_SERV],0xc,6,48);
-    for(kk=0;kk<8;kk++)FR3_ANA[kk]=FR3_ALL[OBJECT_SERV][2*kk]+FR3_ALL[OBJECT_SERV][2*kk+1]+48;
-    FR3_ANA[9]=0;
-    puts1(FR3_ANA,0xc,20,48);
+	if(VVOD_OBJ==0x15)
+	{
+		puts1(PAKO[OBJECT_SERV],0xc,6,48);
+		for(kk=0;kk<8;kk++)FR3_ANA[kk]=FR3_ALL[OBJECT_SERV][2*kk]+FR3_ALL[OBJECT_SERV][2*kk+1]+48;
+		FR3_ANA[8]=0;
+		puts1(FR3_ANA,0xc,20,48);
 	}
 //  T2=mikrotiki();
 //	if(T2<T1)T1=T1-T2;
@@ -478,22 +557,31 @@ int TAKE_STROKA(unsigned char GRPP,int sb,int tms)
 {
   int j,STRK=0;
   switch(GRPP)//переключатель по группам сообщений
-  { //сообщение по стрелкам
-    case 'C': for(j=0;j<tms;j++)STRK=STRK+STR[j];   STRK=STRK+sb;   break;
-    
-    case 'E': for(j=0;j<tms;j++)STRK=STRK+SIG[j];  STRK=STRK+sb-STR[tms];  break;
-    
-    case 'Q': for(j=0;j<tms;j++)STRK=STRK+DOP[j]; STRK=STRK+sb-STR[tms]-SIG[tms]; break;
-    
-    case 'F': for(j=0;j<tms;j++)STRK=STRK+UCH[j]; STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]; break;
-    
-    case 'I': for(j=0;j<tms;j++)STRK=STRK+PUT[j]; STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]-UCH[tms];  break;
-    
-    case 'L': for(j=0;j<tms;j++)STRK=STRK+UPR[j]; STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]-UCH[tms]-PUT[tms];  break;
+	{ //сообщение по стрелкам
+		case 'C': for(j=0;j<tms;j++)STRK=STRK+STR[j];   STRK=STRK+sb;   break;
 
-    default: return(-1);
+		case 'E': for(j=0;j<tms;j++)STRK=STRK+SIG[j];  STRK=STRK+sb-STR[tms];  break;
+
+		case 'Q': for(j=0;j<tms;j++)STRK=STRK+DOP[j];
+							STRK=STRK+sb-STR[tms]-SIG[tms]; break;
+		case 'b': for(j=0;j<tms;j++)STRK=STRK+DOP_B[j];
+							STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]-UCH[tms]-PUT[tms]-UPR[tms];
+							break;
+		case 'd': for(j=0;j<tms;j++)STRK=STRK+DOP_D[j];
+							STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]-DOP_B[tms]-UCH[tms]-PUT[tms]-UPR[tms];
+							break;
+		case 'T': for(j=0;j<tms;j++)STRK=STRK+DOP_T[j];
+							STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]-DOP_B[tms]-DOP_D[tms]-UCH[tms]-PUT[tms]-UPR[tms]; break;
+
+		case 'F': for(j=0;j<tms;j++)STRK=STRK+UCH[j]; STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]; break;
+
+		case 'I': for(j=0;j<tms;j++)STRK=STRK+PUT[j]; STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]-UCH[tms];  break;
+
+		case 'L': for(j=0;j<tms;j++)STRK=STRK+UPR[j]; STRK=STRK+sb-STR[tms]-SIG[tms]-DOP[tms]-UCH[tms]-PUT[tms];  break;
+
+		default: return(-1);
   }
-  return(STRK);
+	return(STRK);
 }
 //==================================================================================
 /**************************************************************************\
@@ -512,23 +600,27 @@ void ZAPOLNI_FR3(unsigned char GRP,int STRKA,int sob,int tum,unsigned char nov)
 	unsigned char /*nom[15],*/l,maska,tester;
   //if(nov==0)return;
   //для группы GRP и строки STRKA найти номера объектов сервера
-  switch(GRP)
+	switch(GRP)
   {
     case 'C': for(i=0;i<5;i++)num[i]=SPSTR[STRKA][i]; break;
     case 'E': for(i=0;i<5;i++)num[i]=SPSIG[STRKA][i]; break;
-    case 'Q': for(i=0;i<5;i++)num[i]=SPDOP[STRKA][i]; break;
+		case 'Q': for(i=0;i<5;i++)num[i]=SPDOP[STRKA][i]; break;
+		case 'b': for(i=0;i<5;i++)num[i]=SPDOP_B[STRKA][i]; break;
+		case 'd': for(i=0;i<5;i++)num[i]=SPDOP_D[STRKA][i]; break;
+		case 'T': for(i=0;i<5;i++)num[i]=SPDOP_T[STRKA][i]; break;
 		case 'F': sgnl=0;
-              for(i=0;i<10;i++)num[i]=SPSP[STRKA][i]; break;
-    case 'I': for(i=0;i<10;i++)num[i]=SPPUT[STRKA][i];break;
+							for(i=0;i<10;i++)num[i]=SPSP[STRKA][i]; break;
+		case 'I': for(i=0;i<10;i++)num[i]=SPPUT[STRKA][i];break;
     case 'L': for(i=0;i<5;i++)num[i]=SPKON[STRKA][i]; break;
     case 'J': break;
     default: return;
-  }
-  //сформировать массив номеров объектов для принятых данных
+	}
+	//сформировать массив номеров объектов для принятых данных
 	//пройти по всем объектам из массива номеров
-  for(i=0;i<5;i++) //пройти по всем объектам сообщения
-  {
-  	if(num[i]>=KOL_VO)continue; //если объект за пределами - ничего не делать
+	for(i=0;i<5;i++) //пройти по всем объектам сообщения
+	{
+		if(num[i]>=KOL_VO)continue; //если объект за пределами - ничего не делать
+		if(num[i]<=0)continue;
 		j=0;
 		k=1<<i;
 		jj=num[i];
@@ -541,20 +633,29 @@ void ZAPOLNI_FR3(unsigned char GRP,int STRKA,int sob,int tum,unsigned char nov)
 			//изменить состояние в соответствии с данными от ТУМСа
 			if((VVOD[tum][sob][i]&l)!=0)//если бит перешел в 1
 			{
-				if(GRP=='E')
+				if(GRP=='E')//если данные получены по сигналу
 				{
-					if(j<4)
+					if(j<4) //если это сигнальные или ВС биты
 					{
-						for(i_m=0;i_m<Nst*3;i_m++)
-						{
+						for(i_m=0;i_m<Nst*3;i_m++)//пройти по глобальным маршрутам
+						{	//если нет маршрута - продолжать
 							if(MARSHRUT_ALL[i_m].KMND==0)continue;
-							i_sig=0;
+
+							i_sig=0; //есть маршрут - считаем сигналы
+
+							//проход по стойкам
 							for(i_s=0;i_s<Nst;i_s++)
-							{
+							{ //если в стойке нет задействованных сигналов - продолжить
 								if(MARSHRUT_ALL[i_m].SIG[i_s][0]==0)continue;
+
+								//если для маршрута стойки этот сигнал первый - продолжить
 								if(MARSHRUT_ALL[i_m].SIG[i_s][0]==jj)continue;
+								//если не этот сигнал - увеличить счетчик
 								else i_sig++;
 							}
+							//если сигналы открылись или в стойках участницах нет сигналов
+							//и маршрут воспринят, то удалить маршрут по открытию начал
+							//или по их отсутствию
 							if((i_sig==0)&&((MARSHRUT_ALL[i_m].SOST&0x1F)==0x1F))
 							{
 								add(i_m,8888,11);
@@ -563,85 +664,87 @@ void ZAPOLNI_FR3(unsigned char GRP,int STRKA,int sob,int tum,unsigned char nov)
 						}
 					}
 				}
-				if(GRP=='I')//если путь
+				if(GRP=='I')//если путь перешел в состояние замыкания
 				{
 					//если принято из одной стойки
-					if((tum+1)==(num[5+i]&0xf))FR3[17]=FR3[17]|l; //установить
+					//if((tum+1)==(num[5+i]&0xf))FR3[17]=FR3[17]|l; //установить
 					//если принято  из другой стойки
-          if((tum+1)==((num[5+i]&0xf0)>>4))FR3[16]=FR3[16]|l;//установить
-          if((j==1)||(j==2)||(j==4))//если ЧИ, НИ или КМ
-          {
-          	FR3[13]=0; //снять замыкание
-						//измениеть ссылку на следующий объект
+					//if((tum+1)==((num[5+i]&0xf0)>>4))FR3[16]=FR3[16]|l;//установить
+					if((j==1)||(j==2)||(j==4))//если ЧИ, НИ или КМ
+					{
+						FR3[13]=0; //снять предварительное замыкание
+						//к номеру сигнала добавить признак релейного замыкания
 						if((FR3[24]!=0)||(FR3[25]!=0))FR3[24]=FR3[24]|0x80;
 						READ_BD(jj);
 						if(bd_osn[1]!=0)//если есть сочленение с путем другой стойки
-            {
+						{
 							write_FR3(jj);//сохранить состояние пути
-              ii=bd_osn[1]; //получить объект для сочлененного пути
-              read_FR3(ii);
-              FR3[13]=0; //снять замыкание
-              //измениеть ссылку на следующий объект
-              if((FR3[24]!=0)||(FR3[25]!=0))FR3[24]=FR3[24]|0x80;
-              FR3[27]=0;FR3[26]=FR3[26]|0XE0; //установить признак новизны
-      				write_FR3(ii);//сохранить изменения для сопряженного пути
-              NOVIZNA[nom_new++]=ii;
-        			PEREDACHA[ii]=PEREDANO;
-        			if(nom_new>=MAX_NEW)nom_new=0;
+							ii=bd_osn[1]; //получить объект для сочлененного пути
+							read_FR3(ii);
+							FR3[13]=0; //снять замыкание
+							//к номеру сигнала добавить признак релейного замыкания
+							if((FR3[24]!=0)||(FR3[25]!=0))FR3[24]=FR3[24]|0x80;
+							FR3[27]=0;FR3[26]=FR3[26]|0XE0; //установить признак новизны
+							write_FR3(ii);//сохранить изменения для сопряженного пути
+							NOVIZNA[nom_new++]=ii;
+							PEREDACHA[ii]=PEREDANO;
+							if(nom_new>=MAX_NEW)nom_new=0;
 							read_FR3(jj);//вернуться к первому объекту пути
 						}
-        	}
-        }
-        //если СП или УП
+					}
+				}
+				//если СП или УП перешел в состояние замыкания
 				if((GRP=='F')&&((j==1)||(j==4))) //если замыкание или МИ
 				{
 					if((tum+1)==(num[5+i]&0xf))FR3[17]=FR3[17]|l; //установить
 					//если принято  из другой стойки
 					if((tum+1)==((num[5+i]&0xf0)>>4))FR3[16]=FR3[16]|l;//установить
-					FR3[13]=0; //снять замыкание
-					//изменить ссылку на следующий объект
-          if((FR3[24]!=0)||(FR3[25]!=0))FR3[24]=FR3[24]|0x80;
-					sgnl=FR3[24]*256+FR3[25]; //получить объект сигнала
+					FR3[13]=0; //снять предварительное замыкание
+					//если секция перекрывная, то для номера сигнала установить
+					//признак включения замыкания
+					if((FR3[24]!=0)||(FR3[25]!=0))FR3[24]=FR3[24]|0x80;
+
+					sgnl=FR3[24]*256+FR3[25]; //получить объект сигнала в момент замыкания
 					READ_BD(jj);
-          if((bd_osn[0]==4)&&(bd_osn[1]!=0))
-          {
+					if((bd_osn[0]==4)&&(bd_osn[1]!=0)) //если  УП и в двух стойках
+					{
 						write_FR3(jj);//сохранить состояние
-            ii=bd_osn[1]; //получить объект для сочлененного пути
-            read_FR3(ii);
+						ii=bd_osn[1]; //получить объект для сочлененного пути
+						read_FR3(ii);
 						FR3[13]=0; //снять замыкание
-            //измениеть ссылку на следующий объект
-            if((FR3[24]!=0)||(FR3[25]!=0))FR3[24]=FR3[24]|0x80;
-            FR3[27]=0;FR3[26]=FR3[26]|0XE0; //установить признак новизны
-      			write_FR3(ii);//сохранить изменения для сопряженного пути
-      			NOVIZNA[nom_new++]=ii;//запомнить номер обновленного объекта
-         		PEREDACHA[ii]=PEREDANO; // сбросить флаг выполненной передачи для объекта
-         		if(nom_new>=MAX_NEW)nom_new=0; //если не передано более 20 новизн,начать с 0
+						//установить для сигнала признак выполнения замыкания
+						if((FR3[24]!=0)||(FR3[25]!=0))FR3[24]=FR3[24]|0x80;
+						FR3[27]=0;FR3[26]=FR3[26]|0XE0; //установить признак новизны
+						write_FR3(ii);//сохранить изменения для сопряженного пути
+						NOVIZNA[nom_new++]=ii;//запомнить номер обновленного объекта
+						PEREDACHA[ii]=PEREDANO; // сбросить флаг выполненной передачи для объекта
+						if(nom_new>=MAX_NEW)nom_new=0; //если не передано более 20 новизн,начать с 0
 						read_FR3(jj);//вернуться к первому объекту пути
 					}
-        }
-        FR3[j*2+1]=1;//в любом случае установить общий
+				}
+				FR3[j*2+1]=1;//в любом случае установить общий
 				if(GRP=='C')
 				{
 					READ_BD(jj);
-					if(bd_osn[12]!=9999)
+					if(bd_osn[12]!=9999)//если стрелка спаренная
 					{
-						if(bd_osn[12]==1)
+						if(bd_osn[12]==1) //если основная в паре
 						{
-							ii=bd_osn[8]&0xFFF;
-							write_FR3(jj);
-							read_FR3(ii);
+							ii=bd_osn[8]&0xFFF; //выделить парную
+							write_FR3(jj);      //записать состояние
+							read_FR3(ii);				//прочитать состояние парной
 							FR3[j*2]=0;
 							FR3[j*2+1]=1;
-							write_FR3(ii);
-							read_FR3(jj);
-							if(j==3)
+							write_FR3(ii);			//записать состояние парной
+							read_FR3(jj);       //вернуться к основной
+							if(j==3)            //если потеря контроля
 							{
-								for(i_m=0;i_m<Nst*3;i_m++)
+								for(i_m=0;i_m<Nst*3;i_m++) //пройти по маршрутам
 								{
-									for(i_s=0;i_s<10;i_s++)
+									for(i_s=0;i_s<10;i_s++) //пройти по стойкам
 									{
-										if(MARSHRUT_ALL[i_m].STREL[tum][i_s]==jj)
-										{
+										if((MARSHRUT_ALL[i_m].STREL[tum][i_s]&0xfff)==jj)
+										{ //если потерявшая контроль стрелка в маршруте найдена
 											add(i_m,8888,12);
 											DeleteMarsh(i_m);
 											break;
@@ -655,18 +758,18 @@ void ZAPOLNI_FR3(unsigned char GRP,int STRKA,int sob,int tum,unsigned char nov)
 			}
 			else //если бит перешел в 0
 			{
-				if((GRP=='I')||(GRP=='F'))//если объект пути
-				{
+				//if((GRP=='I')||(GRP=='F'))//если объект пути
+				//{
 					//если вторая стойка
-					if((tum+1)==(num[5+i]&0xf))FR3[17]=FR3[17]&((~l)&0xff);
+				 //	if((tum+1)==(num[5+i]&0xf))FR3[17]=FR3[17]&((~l)&0xff);
 					//если первая стойка
-					if((tum+1)==((num[5+i]&0xf0)>>4))FR3[16]=FR3[16]&((~l)&0xff);
-					if(((FR3[17]|FR3[16])&l)==0)FR3[j*2+1]=0;
-				}
-				else FR3[j*2+1]=0;
+				 //	if((tum+1)==((num[5+i]&0xf0)>>4))FR3[16]=FR3[16]&((~l)&0xff);
+				//	if(((FR3[17]|FR3[16])&l)==0)FR3[j*2+1]=0;
+				//}
+				FR3[j*2+1]=0;
 				if((GRP=='F')&&(j==1))//если СП разомкнулось
 				{
-					if((FR3[24]&0x80)!=0)//если был открыт сигнал
+					if((FR3[24]&0x80)!=0)//если фиксировалось ранее релейное замыкание
 					{
 						sgnl=(FR3[24]&0x7f)*256+FR3[25]; //получит объект сигнала
 						FR3[24]=0; FR3[25]=0; //сбросить номер сигнала в СП
@@ -693,6 +796,8 @@ void ZAPOLNI_FR3(unsigned char GRP,int STRKA,int sob,int tum,unsigned char nov)
 		}
 		FR3[27]=0;FR3[26]=FR3[26]|0XE0; //установить признак новизны
 		//сохранить измененные массивы
+		//изменения для инвертированного датчика день/ночь
+		if((jj==912)||(jj==1107))FR3[1]=FR3[1]^1; //$$$$  13_04_07
 		write_FR3(jj);
 		if(GRP=='L') //если это группа контроллера
 		{
@@ -707,11 +812,12 @@ void ZAPOLNI_FR3(unsigned char GRP,int STRKA,int sob,int tum,unsigned char nov)
 			}
 		}
 FIN:
-		if(sgnl!=0)//если был открытый сигнал
+		//если был найден сигнал для перекрывной секции,
+		if(sgnl!=0)
 		{
-			if(sgnl<0x8000)
+			if(sgnl<0x8000) //если пришли из размыкания перекрывной секции
 			{
-				read_FR3(sgnl);
+				read_FR3(sgnl); //прочитать сигнал
 				FR3[13]=0;FR3[15]=0;
 				FR3[24]=0;
 				FR3[27]=0;FR3[26]=FR3[26]|0xE0; //установить признак новизны
@@ -721,29 +827,30 @@ FIN:
 				write_FR3(sgnl);
 				sgnl=0;
 			 }
-			 if(sgnl>=0x8000)
+			 if(sgnl>=0x8000)//если пришли из замыкания перекрывной секции
 			 {
-				 ii=sgnl&&0xFFF;
-				 read_FR3(ii);
+				 ii=sgnl&&0x7FFF;
+				 read_FR3(ii);//прочитать состояние сигнала
 				 //сохранить измененные массивы на виртуальном диске
+					//в сигнале установить признак замыкания перекрывной секции
 				 FR3[24]=0x80;
 				 write_FR3(ii);
 				 obnovi(ii);
 				 sgnl=0;
-       }
-     }
-     //если байт обновился
+			 }
+		 }
+		 //если байт обновился
 		if((nov&k)!=0)obnovi(jj);
-    if(tiki_tum[tum]>30)//если маршрутный таймер истек
-    {
-      if(GRP=='L') //если это группа контроллера
-      {
+		if(tiki_tum[tum]>30)//если маршрутный таймер истек
+		{
+			if(GRP=='L') //если это группа контроллера
+			{
 				READ_BD(jj); //прочитать базу для объекта
 				if(bd_osn[0]==25)KORZINA[tum]=VVOD[tum][sob][i]&1;
-      }
-    }
-  }
-  return;
+			}
+		}
+	}
+	return;
 }
 //===========================================================================
 /*************************************************\
@@ -752,8 +859,8 @@ FIN:
 \*************************************************/
 void interrupt far reading_char1()
 {
-  unsigned int adr,dd,knl;
-  enable();
+	unsigned int adr,dd,knl;
+	enable();
 snova:
   dd=inportb(0x300);
   if((dd&1)==0)knl=0; //активность первого канала
@@ -764,7 +871,7 @@ snova:
       else
         if((dd&8)==0)knl=3; //активность четвертого канала
         else goto end;//если нет активности каналов
-  adr=ADR_TUMS_OSN+knl*8;//определение базового адреса активного канала
+	adr=ADR_TUMS_OSN+knl*8;//определение базового адреса активного канала
   dd=inportb(adr+2); //определить прерывание канала
   if((dd&7)==6)
   {
@@ -773,9 +880,9 @@ snova:
   }
 	if(adr==ADR_TUMS_OSN)
   {
-    if((dd&7)==4)in_tums_osn();//если есть прием - принять
+		if((dd&7)==4)in_tums_osn();//если есть прием - принять
     else
-      if((dd&7)==2)vidacha1(ADR_TUMS_OSN);//если есть передача - передать
+			if((dd&7)==2)vidacha1(ADR_TUMS_OSN);//если есть передача - передать
   }
   if(adr==ADR_TUMS_REZ)
   {
@@ -810,7 +917,7 @@ snova:
           if(dd==0xc1)goto snova;
   }
  //перейти к повторной проверке активности каналов
-  goto snova;
+	goto snova;
 end:
   outportb(0x20,0x20);//выход из IRQ5
   if(V1>0x70)outportb(0xa0,0x20);//выход из IRQ15
@@ -845,7 +952,7 @@ snova:
   {
     if((dd&0xc)==0xc)//если прерывание по тайм-ауту
     {
-      dd=inportb(ADR_ARM_OSN);
+			dd=inportb(ADR_ARM_OSN);
       outportb(ADR_ARM_OSN+2,0xC7);//очистить FIFO
       goto snova;
     }
@@ -880,7 +987,7 @@ snova:
       goto snova;
     }
     else
-      if((dd&7)==4)in_pred();//если прерывение по приему
+			if((dd&7)==4)in_pred();//если прерывение по приему
       else
         if((dd&7)==2)out_pred();//если прерывание по передаче
         else
@@ -897,14 +1004,19 @@ end:
 *    void interrupt far TIMER_TIC()        *
 * обработчик прерываний системного таймера *
 \******************************************/
+#ifdef WORK
 void interrupt far TIMER_TIC()
+#else
+void TIMER_TIC()
+#endif
 {
 	int i,j,s_m;
 	unsigned char aa;
 	cikl_marsh++;
-  win_gash();
-  if(RESET_TIME<0x999){RESET_TIME--;if(RESET_TIME<=0)RESET_TIME=0;}
-  T_fix++;
+	if(cikl_marsh>10)cikl_marsh=0;
+	win_gash();
+	if(RESET_TIME<0x999){RESET_TIME--;if(RESET_TIME<=0)RESET_TIME=0;}
+	T_fix++;
 
 	if((T_fix>=10920)&&(ACTIV==1))//наступило время записи всего для активного
 	{ fixir=0xff; T_fix=10920; T_zap++; putch1('*',0x8b,17,50); }
@@ -927,31 +1039,32 @@ void interrupt far TIMER_TIC()
 	for(i=0;i<Narm;i++)
 	for(j=0;j<12;j++)aa=aa|KOMANDA_MARS[i][0][j];
 	for(j=0;j<12;j++)aa=aa|KOMANDA_MARS[i][1][j];
-	putch1(aa|0x40,0xe,43,50);
+	putch1(aa|0x48,0xe,43,50);
 	//признак наличия раздельной в сервере
 	aa=0;
 	for(i=0;i<Narm;i++)
 	for(j=0;j<12;j++)aa=aa|KOMANDA_RAZD[i][0][j];
 	for(j=0;j<12;j++)aa=aa|KOMANDA_RAZD[i][1][j];
-	putch1(aa|0x40,0xe,44,50);
+	putch1(aa|0x48,0xe,44,50);
 	//признак наличия раздельной в ТУМСах
 	aa=0;
 	for(i=0;i<Narm;i++)
 	for(j=0;j<15;j++)aa=aa|KOMANDA_ST[i][j];
-	putch1(aa|0x40,0xe,45,50);
+	putch1(aa|0x48,0xe,45,50);
 	//признак наличия маршрута в ТУМСах
 	aa=0;
 	for(i=0;i<Narm;i++)
 	for(j=0;j<15;j++)aa=aa|KOMANDA_TUMS[i][j];
-	putch1(aa|0x40,0xe,46,50);
+	putch1(aa|0x48,0xe,46,50);
 	//признак наличия диагностики
 	aa=0;
 	for(i=0;i<3;i++)aa=aa|DIAGNOZ[i];
-	putch1(aa|0x40,0xe,47,50);
+	putch1(aa|0x48,0xe,47,50);
 	//признак повреждения плат
 	aa=0;
 	for(i=0;i<6;i++)aa=aa|ERR_PLAT[i];
-	putch1(aa|0x40,0xe,48,50);
+	putch1(aa|0x48,0xe,48,50);
+
 
 	//номер данного сервера
 	putch1(SERVER+48,0xa,13,50);
@@ -1020,54 +1133,61 @@ void interrupt far TIMER_TIC()
 		ADR_TUMS_OUT1=TUMS_ZAPROS[ZAPROS_TUMS1-1];
 
 		ZAPROS[0]='!';ZAPROS[1]=ADR_TUMS_OUT;
-
-		//если нет какой-либо команды для стойки, то завершить запрос
-		//иначе - начать запись команды
-		if((KOMANDA_TUMS[ZAPROS_TUMS-1][11]==0)&&(KOMANDA_ST[ZAPROS_TUMS-1][11]==0))ZAPROS[2]=')';
-		else ZAPROS[2]='(';
+		ZAPROS[2]=0;
 		ZAPROS[4]=0;
 
 		ZAPROS1[0]='!'; ZAPROS1[1]=ADR_TUMS_OUT1;
-		if((KOMANDA_TUMS[ZAPROS_TUMS1-1][11]==0)&&(KOMANDA_ST[ZAPROS_TUMS1-1][11]==0))ZAPROS1[2]=')';
-		else ZAPROS1[2]='(';
+		ZAPROS1[2]=0;
 		ZAPROS1[4]=0;
 
 		//РАБОТА С ЗАПРОСАМИ В ТУМСы
-		for(i=0;i<3;i++) //перенести запросы в буфера вывода
+		for(i=0;i<2;i++) //перенести запросы в буфера вывода
 		{ BUF_OUT[UKAZ_ZAP++]=ZAPROS[i];if(UKAZ_ZAP>=SIZE_BUF)UKAZ_ZAP=0;
 			BUF_OUT1[UKAZ_ZAP1++]=ZAPROS1[i];if(UKAZ_ZAP1>=SIZE_BUF)UKAZ_ZAP1=0;
 		}
 		//работа с маршрутами
-		if(KOMANDA_TUMS[ZAPROS_TUMS-1][10]!=0)
-		{ if(ADR_TUMS_OUT==KOMANDA_TUMS[ZAPROS_TUMS-1][1])
-			{ s_m=KOMANDA_TUMS[ZAPROS_TUMS-1][11];
-				MARSHRUT_ST[ZAPROS_TUMS-1][s_m].T_VYD=T_TIME;;
-				KOMANDA_TUMS[ZAPROS_TUMS-1][11]=')';
-				for(i=1;i<12;i++) //перенести команду в буфера вывода
-				{ BUF_OUT[UKAZ_ZAP++]=KOMANDA_TUMS[ZAPROS_TUMS-1][i];
-					if(UKAZ_ZAP>=SIZE_BUF)UKAZ_ZAP=0;
-					//если маршрут выдавался 3 раза - сбросить команду
-					if(SHET_MARSH[ZAPROS_TUMS-1]>3)KOMANDA_TUMS[ZAPROS_TUMS-1][i]=0;
-				}
-				//увеличить счетчик числа выданных команд
-				SHET_MARSH[ZAPROS_TUMS-1]++;
-
-				if(SHET_MARSH[ZAPROS_TUMS-1]>4)//если окончен цикл повторов команд
+		if((KOMANDA_TUMS[ZAPROS_TUMS-1][10]!=0))
+		{	if(ADR_TUMS_OUT==KOMANDA_TUMS[ZAPROS_TUMS-1][1])
+			{ s_m=KOMANDA_TUMS[ZAPROS_TUMS-1][14];
+				if((T_TIME-MARSHRUT_ST[ZAPROS_TUMS-1][s_m].T_VYD)>2L)
 				{
-					SHET_MARSH[ZAPROS_TUMS-1]=0; //сбросить счетчик числа повторов
-					for(i=0;i<15;i++)KOMANDA_TUMS[ZAPROS_TUMS-1][i]=0;
+					MARSHRUT_ST[ZAPROS_TUMS-1][s_m].T_VYD=T_TIME;
+					MARSHRUT_ST[ZAPROS_TUMS-1][s_m].T_MAX=
+					MARSHRUT_ST[ZAPROS_TUMS-1][s_m].T_MAX+T_TIME;
+					//установить состояние=выдано
+					MARSHRUT_ST[ZAPROS_TUMS-1][s_m].SOST=
+					(MARSHRUT_ST[ZAPROS_TUMS-1][s_m].SOST&0xC0)|0xF;
+					KOMANDA_TUMS[ZAPROS_TUMS-1][11]=')';
+					ZAPROS[2]='(';
+					TUMS_RABOT[ZAPROS_TUMS-1]=0xF;
+					for(i=0;i<12;i++) //перенести команду в буфера вывода
+					{ BUF_OUT[UKAZ_ZAP++]=KOMANDA_TUMS[ZAPROS_TUMS-1][i];
+						if(UKAZ_ZAP>=SIZE_BUF)UKAZ_ZAP=0;
+						//если маршрут выдавался 3 раза - сбросить команду УБРАНО 14_04_07$$$$
+						//if(SHET_MARSH[ZAPROS_TUMS-1]>3)
+						KOMANDA_TUMS[ZAPROS_TUMS-1][i]=0;
+
+					}
+					//увеличить счетчик числа выданных команд УБРАНО 14_04_07$$$$
+					// SHET_MARSH[ZAPROS_TUMS-1]++;
+					/*
+					if(SHET_MARSH[ZAPROS_TUMS-1]>4)//если окончен цикл повторов команд
+					{
+						SHET_MARSH[ZAPROS_TUMS-1]=0; //сбросить счетчик числа повторов
+						for(i=0;i<15;i++)KOMANDA_TUMS[ZAPROS_TUMS-1][i]=0;
+					} */
+					if(REGIM==COMMAND)
+					{
+						putch1(0x10,0xc,1,Y_KOM); //нарисовать стрелочку в позиции 1,Y_KOM
+						if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1); //стереть старую стрелочку
+						else putch1(' ',0xc,1,46);  //стереть старую стрелочку в конце
+						puts1(KOMANDA_TUMS[ZAPROS_TUMS-1],0x80+SHET_MARSH[ZAPROS_TUMS-1]+1,55,Y_KOM); //нарисовать новую стрелку
+						Y_KOM++; //перейти на следующую строку
+						if(Y_KOM>=47)Y_KOM=3;
+						//стереть следующую команду
+						puts1("                                   ",0xa,3,Y_KOM);
+					}
 				}
-			}
-			if(REGIM==COMMAND)
-			{
-				putch1(0x10,0xc,1,Y_KOM); //нарисовать стрелочку в позиции 1,Y_KOM
-				if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1); //стереть старую стрелочку
-				else putch1(' ',0xc,1,47);  //стереть старую стрелочку в конце
-				puts1(KOMANDA_TUMS[ZAPROS_TUMS-1],0xa,55,Y_KOM); //нарисовать новую стрелку
-				Y_KOM++; //перейти на следующую строку
-				if(Y_KOM>=48)Y_KOM=3;
-				//стереть следующую команду
-				puts1("                                   ",0xa,3,Y_KOM);
 			}
 		}
 		else
@@ -1078,12 +1198,12 @@ void interrupt far TIMER_TIC()
 				{
 					putch1(0x10,0xc,1,Y_KOM);
 					if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1);
-					else putch1(' ',0xc,1,47);
+					else putch1(' ',0xc,1,46);
 					for(i=0;i<12;i++)putch1(KOMANDA_ST[ZAPROS_TUMS-1][i],0xc,55+i,Y_KOM);
 					Y_KOM++;
 					puts1("                                   ",0xa,3,Y_KOM);
 					puts1("             ",0xa,55,Y_KOM);
-					if(Y_KOM>=48)Y_KOM=3;
+					if(Y_KOM>=47)Y_KOM=3;
 				}
 			}
 			//если есть раздельная команда в ТУМС
@@ -1091,7 +1211,8 @@ void interrupt far TIMER_TIC()
 			{
 				//если адрес запроса совпадает с адресом команды
 				if(ADR_TUMS_OUT==KOMANDA_ST[ZAPROS_TUMS-1][1])
-				{ for(i=1;i<12;i++) //перенести команду в буфера вывода
+				{ ZAPROS[2]='(';
+					for(i=0;i<12;i++) //перенести команду в буфера вывода
 					{ BUF_OUT[UKAZ_ZAP++]=KOMANDA_ST[ZAPROS_TUMS-1][i];
 						if(UKAZ_ZAP>=SIZE_BUF)UKAZ_ZAP=0;
 						//если нажато кнопка ОК, то команду сбросить, исключая повторы
@@ -1110,34 +1231,52 @@ void interrupt far TIMER_TIC()
 				}
 			}
 		}
+		if(ZAPROS[2]==0)
+		{
+			BUF_OUT[UKAZ_ZAP++]=')';
+			if(UKAZ_ZAP>=SIZE_BUF)UKAZ_ZAP=0;
+		}
 		//аналогично для резервного канала
 		if(KOMANDA_TUMS[ZAPROS_TUMS1-1][10]!=0)
 		{ if(ADR_TUMS_OUT1==KOMANDA_TUMS[ZAPROS_TUMS1-1][1])
 			{
-				s_m=KOMANDA_TUMS[ZAPROS_TUMS1-1][11];
-				MARSHRUT_ST[ZAPROS_TUMS1-1][s_m].T_VYD=T_TIME;;
-				KOMANDA_TUMS[ZAPROS_TUMS1-1][11]=')';
-				for(i=1;i<12;i++) //перенести команду в буфера вывода
-				{ BUF_OUT1[UKAZ_ZAP1++]=KOMANDA_TUMS[ZAPROS_TUMS1-1][i];
-					if(UKAZ_ZAP1>=SIZE_BUF)UKAZ_ZAP1=0;
-					if(SHET_MARSH[ZAPROS_TUMS1-1]>3)KOMANDA_TUMS[ZAPROS_TUMS1-1][i]=0;
+				s_m=KOMANDA_TUMS[ZAPROS_TUMS1-1][14];
+				if((T_TIME-MARSHRUT_ST[ZAPROS_TUMS1-1][s_m].T_VYD)>2l)
+				{ MARSHRUT_ST[ZAPROS_TUMS1-1][s_m].T_VYD=T_TIME;
+					MARSHRUT_ST[ZAPROS_TUMS1-1][s_m].T_MAX=
+					MARSHRUT_ST[ZAPROS_TUMS1-1][s_m].T_MAX+T_TIME;
+
+					//установить состояние=выдано
+					MARSHRUT_ST[ZAPROS_TUMS1-1][s_m].SOST=
+					(MARSHRUT_ST[ZAPROS_TUMS1-1][s_m].SOST&0xC0)|0xF;
+					KOMANDA_TUMS[ZAPROS_TUMS1-1][11]=')';
+					ZAPROS1[2]='(';
+					TUMS_RABOT[ZAPROS_TUMS1-1]=0xF;
+					for(i=0;i<12;i++) //перенести команду в буфера вывода
+					{ BUF_OUT1[UKAZ_ZAP1++]=KOMANDA_TUMS[ZAPROS_TUMS1-1][i];
+						if(UKAZ_ZAP1>=SIZE_BUF)UKAZ_ZAP1=0;
+						//if(SHET_MARSH[ZAPROS_TUMS1-1]>3) $$$$ УБРАНО 14_04_07
+						KOMANDA_TUMS[ZAPROS_TUMS1-1][i]=0;
+					}
+					/*
+					SHET_MARSH[ZAPROS_TUMS1-1]++;
+					if(SHET_MARSH[ZAPROS_TUMS1-1]>4)
+					{
+						SHET_MARSH[ZAPROS_TUMS1-1]=0;
+						for(i=0;i<15;i++)KOMANDA_TUMS[ZAPROS_TUMS1-1][i]=0;
+					}
+					*/
+					if(REGIM==COMMAND)
+					{
+						putch1(0x10,0xc,1,Y_KOM);
+						if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1);
+						else putch1(' ',0xc,1,46);
+						puts1(KOMANDA_TUMS[ZAPROS_TUMS1],0x81+SHET_MARSH[ZAPROS_TUMS1-1],55,Y_KOM);
+						Y_KOM++;
+						if(Y_KOM>=47)Y_KOM=3;
+						puts1("                                   ",0xa,3,Y_KOM);
+					}
 				}
-				SHET_MARSH[ZAPROS_TUMS1-1]++;
-				if(SHET_MARSH[ZAPROS_TUMS1-1]>4)
-				{
-					SHET_MARSH[ZAPROS_TUMS1-1]=0;
-					for(i=0;i<15;i++)KOMANDA_TUMS[ZAPROS_TUMS1-1][i]=0;
-				}
-			}
-			if(REGIM==COMMAND)
-			{
-				putch1(0x10,0xc,1,Y_KOM);
-				if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1);
-				else putch1(' ',0xc,1,47);
-				puts1(KOMANDA_TUMS[ZAPROS_TUMS1],0xa,55,Y_KOM);
-				Y_KOM++;
-				if(Y_KOM>=48)Y_KOM=3;
-				puts1("                                   ",0xa,3,Y_KOM);
 			}
 		}
 		else
@@ -1148,12 +1287,12 @@ void interrupt far TIMER_TIC()
 				{
 					putch1(0x10,0xc,1,Y_KOM);
 					if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1);
-					else putch1(' ',0xc,1,47);
+					else putch1(' ',0xc,1,46);
 					for(i=0;i<12;i++)putch1(KOMANDA_ST[ZAPROS_TUMS1-1][i],0xc,55+i,Y_KOM);
 					Y_KOM++;
 					puts1("                                   ",0xa,3,Y_KOM);
 					puts1("             ",0xa,55,Y_KOM);
-					if(Y_KOM>=48)Y_KOM=3;
+					if(Y_KOM>=47)Y_KOM=3;
 				}
 			}
 			//РАБОТА С РАЗДЕЛЬНЫМИ КОМАНДАМИ В СТОЙКУ
@@ -1161,7 +1300,8 @@ void interrupt far TIMER_TIC()
 			{
 				if(ADR_TUMS_OUT1==KOMANDA_ST[ZAPROS_TUMS1-1][1])
 				{
-					for(i=1;i<12;i++) //перенести команду в буфера вывода
+					ZAPROS1[2]='(';
+					for(i=0;i<12;i++) //перенести команду в буфера вывода
 					{ BUF_OUT1[UKAZ_ZAP1++]=KOMANDA_ST[ZAPROS_TUMS1-1][i];
 						if(UKAZ_ZAP1>=SIZE_BUF)UKAZ_ZAP1=0;
 						if(OK_KNOPKA!=0)KOMANDA_ST[ZAPROS_TUMS1-1][i]=0;
@@ -1177,6 +1317,11 @@ void interrupt far TIMER_TIC()
 				}
 			}
 		}
+		if(ZAPROS1[2]==0)
+		{
+			BUF_OUT1[UKAZ_ZAP1++]=')';
+			if(UKAZ_ZAP1>=SIZE_BUF)UKAZ_ZAP1=0;
+		}
 		outportb(ADR_TUMS_OSN+1,0x3);
 		outportb(ADR_TUMS_REZ+1,0x3);
 	}
@@ -1190,10 +1335,10 @@ void interrupt far TIMER_TIC()
 int check_summ(unsigned char reg[15])
 {
 	unsigned char sum=0;
-  int ic;
-  for(ic=1;ic<10;ic++)sum=sum^reg[ic];
-  sum=sum|0x40;
-  return(sum);
+	int ic;
+	for(ic=1;ic<10;ic++)sum=sum^reg[ic];
+	sum=sum|0x40;
+	return(sum);
 }
 //===========================================================================
 /***************************************\
@@ -1231,7 +1376,7 @@ void new_zapros(void)
 	if(REGIM==0)
 	{
 		putch1(30,0xe,4+6*(ZAPROS_TUMS1-1),46);
-		putch1(31,0xe,54+9*(SERVER-1),49);
+		putch1(31,0xe,54+9*(SERVER-1),48);
 	}
 	return;
 }
@@ -1637,121 +1782,121 @@ void ANALIZ_SHN(void)
 \*****************************************/
 void ANALIZ_ARM(void)
 {
-  int ik,il,serv;
-  unsigned char CRCs;
-  if(END_ARM!=0)//если есть конец информации АРМа по основному каналу
-  { if((BUF_IN_ARM[0]==0xAA)&&(BUF_IN_ARM[END_ARM]==0x55))//если окантовка 
-    { //если свободен 1-й буфер основного канала - закачать его данными 
-      if(OSN1_KS[0]==0) for(il=0;il<28;il++)OSN1_KS[il]=BUF_IN_ARM[il];
-      else
-        if(OSN2_KS[0]==0)for(il=0;il<28;il++)OSN2_KS[il]=BUF_IN_ARM[il];
-        //если сервер не активен, то выделить адрес запроса 
-        if(ACTIV!=1)ZAPROS_ARM=(BUF_IN_ARM[1]&0xF0)>>4;
+	int ik,il,serv;
+	unsigned char CRCs;
+	if(END_ARM!=0)//если есть конец информации АРМа по основному каналу
+	{ if((BUF_IN_ARM[0]==0xAA)&&(BUF_IN_ARM[END_ARM]==0x55))//если окантовка
+		{ //если свободен 1-й буфер основного канала - закачать его данными
+			if(OSN1_KS[0]==0) for(il=0;il<28;il++)OSN1_KS[il]=BUF_IN_ARM[il];
+			else
+				if(OSN2_KS[0]==0)for(il=0;il<28;il++)OSN2_KS[il]=BUF_IN_ARM[il];
+				//если сервер не активен, то выделить адрес запроса
+				if(ACTIV!=1)ZAPROS_ARM=(BUF_IN_ARM[1]&0xF0)>>4;
 
-        //если АРМ активный в каком-либо районе,то записать в архив 
-        if((KONFIG_ARM[ZAPROS_ARM-4][0]==0xFF)||(KONFIG_ARM[ZAPROS_ARM-4][1]==0xFF))
-//        add_ARM_IN(ZAPROS_ARM,0); //записать принятое в архив 
-        for(il=0;il<28;il++)BUF_IN_ARM[il]=0; //очистить буфер приема
-    }
+				//если АРМ активный в каком-либо районе,то записать в архив
+//        if((KONFIG_ARM[ZAPROS_ARM-4][0]==0xFF)||(KONFIG_ARM[ZAPROS_ARM-4][1]==0xFF))
+//        add_ARM_IN(ZAPROS_ARM,0); //записать принятое в архив
+				for(il=0;il<28;il++)BUF_IN_ARM[il]=0; //очистить буфер приема
+		}
 
-    if(OSN1_KS[0]==0xAA)//если начало пакета соответствует 
-    {
-      CRCs=CalculateCRC8(&OSN1_KS[1],25);//подсчитать контр.сумму 
-      if(CRCs!=OSN1_KS[26])for(il=0;il<28;il++)OSN1_KS[il]=0; //если не та
-      else
-      {
-        if(ACTIV==1)
-        {
-          serv=OSN1_KS[1]&0xF;
-          if(serv!=SERVER)ACTIV=0;
-        }
-        if(ACTIV!=1)ZAPROS_ARM=(OSN1_KS[1]&0xF0)>>4;//выделить запрос
-        if(REGIM==0)//для основного окна изобразить яркие стрелки 
-        {
-          putch1(31,0xa,11+9*(ZAPROS_ARM-4),35);
-          putch1(31,0xa,54+9*(SERVER-1),43-2*(SERVER-1));
-        }
-        if(REGIM==KANAL)//для окна каналов вывести строку буфера
-        for(ik=0;ik<28;ik++)putch1(OSN1_KS[ik]|0x40,atrib,43+ik,19+(ZAPROS_ARM-4)*6);
-      }
-    }
-    if(OSN2_KS[0]==0xAA)//аналогично с запасным буфером
-    {
-      CRCs=CalculateCRC8(&OSN2_KS[1],25);
-      if(CRCs!=OSN2_KS[26])for(il=0;il<28;il++)OSN2_KS[il]=0;
-      else
-      {
-        if(ACTIV==1)
-        {
-          serv=OSN2_KS[1]&0xF;
-          if(serv!=SERVER)ACTIV=0;
-        }
-        if(ACTIV==0)ZAPROS_ARM=(OSN2_KS[1]&0xF0)>>4;
-        if(REGIM==0)
-        {
-          putch1(31,0xa,11+9*(ZAPROS_ARM-4),35);
-          putch1(31,0xa,54+9*(SERVER-1),43-2*(SERVER-1));
-        }
-        if(REGIM==KANAL)
-        for(ik=0;ik<28;ik++)putch1(OSN2_KS[ik]|0x40,atrib,43+ik,19+(ZAPROS_ARM-4)*6);
-      }
-    }
-    if(OSN1_KS[0]==0xAA)RASPAK_ARM(1,0,0xff);
-    if(OSN2_KS[0]==0xAA)RASPAK_ARM(2,0,0xff);
-    if(OSN1_KS[0]==0xAA)for(ik=0;ik<28;ik++)OSN1_KS[ik]=0;
-    if(OSN2_KS[0]==0xAA)for(ik=0;ik<28;ik++)OSN2_KS[ik]=0;
-    END_ARM=0;
-  }
+		if(OSN1_KS[0]==0xAA)//если начало пакета соответствует
+		{
+			CRCs=CalculateCRC8(&OSN1_KS[1],25);//подсчитать контр.сумму
+			if(CRCs!=OSN1_KS[26])for(il=0;il<28;il++)OSN1_KS[il]=0; //если не та
+			else
+			{
+				if(ACTIV==1)
+				{
+					serv=OSN1_KS[1]&0xF;
+					if(serv!=SERVER)ACTIV=0;
+				}
+				if(ACTIV!=1)ZAPROS_ARM=(OSN1_KS[1]&0xF0)>>4;//выделить запрос
+				if(REGIM==0)//для основного окна изобразить яркие стрелки
+				{
+					putch1(31,0xa,11+9*(ZAPROS_ARM-4),35);
+					putch1(31,0xa,54+9*(SERVER-1),43-2*(SERVER-1));
+				}
+				if(REGIM==KANAL)//для окна каналов вывести строку буфера
+				for(ik=0;ik<28;ik++)putch1(OSN1_KS[ik]|0x40,atrib,43+ik,19+(ZAPROS_ARM-4)*6);
+			}
+		}
+		if(OSN2_KS[0]==0xAA)//аналогично с запасным буфером
+		{
+			CRCs=CalculateCRC8(&OSN2_KS[1],25);
+			if(CRCs!=OSN2_KS[26])for(il=0;il<28;il++)OSN2_KS[il]=0;
+			else
+			{
+				if(ACTIV==1)
+				{
+					serv=OSN2_KS[1]&0xF;
+					if(serv!=SERVER)ACTIV=0;
+				}
+				if(ACTIV==0)ZAPROS_ARM=(OSN2_KS[1]&0xF0)>>4;
+				if(REGIM==0)
+				{
+					putch1(31,0xa,11+9*(ZAPROS_ARM-4),35);
+					putch1(31,0xa,54+9*(SERVER-1),43-2*(SERVER-1));
+				}
+				if(REGIM==KANAL)
+				for(ik=0;ik<28;ik++)putch1(OSN2_KS[ik]|0x40,atrib,43+ik,19+(ZAPROS_ARM-4)*6);
+			}
+		}
+		if(OSN1_KS[0]==0xAA)RASPAK_ARM(1,0,0xff);
+		if(OSN2_KS[0]==0xAA)RASPAK_ARM(2,0,0xff);
+		if(OSN1_KS[0]==0xAA)for(ik=0;ik<28;ik++)OSN1_KS[ik]=0;
+		if(OSN2_KS[0]==0xAA)for(ik=0;ik<28;ik++)OSN2_KS[ik]=0;
+		END_ARM=0;
+	}
 
-  if(END_ARM1!=0)//если есть конец информации по резервному каналу
-  {
-    if((BUF_IN_ARM1[0]==0xAA)&&(BUF_IN_ARM1[END_ARM1]==0x55))
-    {
-      if(REZ1_KS[0]==0)for(il=0;il<28;il++)REZ1_KS[il]=BUF_IN_ARM1[il];
-      else
-        if(REZ2_KS[0]==0)for(il=0;il<28;il++)REZ2_KS[il]=BUF_IN_ARM1[il];
-        if(ACTIV==1)
-        {
-          serv=BUF_IN_ARM1[1]&0xF;
-          if(serv!=SERVER)ACTIV=0;
-        }
-        if(ACTIV!=1)ZAPROS_ARM1=(BUF_IN_ARM1[1]&0xF0)>>4;//резервный запрос
-        if(REGIM==0)//на основном экране вывести яркие стрелки "запрос-ответ"
-        {
-          putch1(30,0xe,11+9*(ZAPROS_ARM1-4),27);
+	if(END_ARM1!=0)//если есть конец информации по резервному каналу
+	{
+		if((BUF_IN_ARM1[0]==0xAA)&&(BUF_IN_ARM1[END_ARM1]==0x55))
+		{
+			if(REZ1_KS[0]==0)for(il=0;il<28;il++)REZ1_KS[il]=BUF_IN_ARM1[il];
+			else
+				if(REZ2_KS[0]==0)for(il=0;il<28;il++)REZ2_KS[il]=BUF_IN_ARM1[il];
+				if(ACTIV==1)
+				{
+					serv=BUF_IN_ARM1[1]&0xF;
+					if(serv!=SERVER)ACTIV=0;
+				}
+				if(ACTIV!=1)ZAPROS_ARM1=(BUF_IN_ARM1[1]&0xF0)>>4;//резервный запрос
+				if(REGIM==0)//на основном экране вывести яркие стрелки "запрос-ответ"
+				{
+					putch1(30,0xe,11+9*(ZAPROS_ARM1-4),27);
 //          putch1(17,15,58+9*(SERVER-1),45-2*(SERVER-1));
-          putch1(31,14,56+9*(SERVER-1),43-2*(SERVER-1)); //стрелочки из резервной шины АРМ в сервер
-        }
-        //на экране каналов вывести буфер 
-        if(REGIM==KANAL)for(ik=0;ik<28;ik++)putch1(BUF_IN_ARM1[ik]|0x40,atrib,43+ik,22+(ZAPROS_ARM1-4)*6);
-        if((KONFIG_ARM[ZAPROS_ARM1-4][0]==0xFF)||
-        (KONFIG_ARM[ZAPROS_ARM1-4][1]==0xFF))
+					putch1(31,14,56+9*(SERVER-1),43-2*(SERVER-1)); //стрелочки из резервной шины АРМ в сервер
+				}
+				//на экране каналов вывести буфер
+				if(REGIM==KANAL)for(ik=0;ik<28;ik++)putch1(BUF_IN_ARM1[ik]|0x40,atrib,43+ik,22+(ZAPROS_ARM1-4)*6);
+//				if((KONFIG_ARM[ZAPROS_ARM1-4][0]==0xFF)||
+//				(KONFIG_ARM[ZAPROS_ARM1-4][1]==0xFF))
 //        add_ARM_IN(ZAPROS_ARM1,1);
-        for(il=0;il<28;il++)BUF_IN_ARM1[il]=0;//очистить резервный буфер 
-    }
-    if(REZ1_KS[0]==0xAA)
-    {
-      CRCs=CalculateCRC8(&REZ1_KS[1],25);
-      if(CRCs!=REZ1_KS[26])for(il=0;il<28;il++)REZ1_KS[il]=0;
-    }
-    if(REZ2_KS[0]==0xAA)
-    {
-      CRCs=CalculateCRC8(&REZ2_KS[1],25);
-      if(CRCs!=REZ2_KS[26])for(il=0;il<28;il++)REZ2_KS[il]=0;
-    }
-    if(REZ1_KS[0]==0xAA)
-    {
-      RASPAK_ARM(3,1,0xff);
-      for(ik=0;ik<28;ik++)REZ1_KS[ik]=0;
-    }
-    if(REZ2_KS[0]==0xAA)
-    {
-      RASPAK_ARM(4,1,0xff);
-      for(ik=0;ik<28;ik++)REZ2_KS[ik]=0;
-    }
-    END_ARM1=0;
-  }
-  return;
+				for(il=0;il<28;il++)BUF_IN_ARM1[il]=0;//очистить резервный буфер
+		}
+		if(REZ1_KS[0]==0xAA)
+		{
+			CRCs=CalculateCRC8(&REZ1_KS[1],25);
+			if(CRCs!=REZ1_KS[26])for(il=0;il<28;il++)REZ1_KS[il]=0;
+		}
+		if(REZ2_KS[0]==0xAA)
+		{
+			CRCs=CalculateCRC8(&REZ2_KS[1],25);
+			if(CRCs!=REZ2_KS[26])for(il=0;il<28;il++)REZ2_KS[il]=0;
+		}
+		if(REZ1_KS[0]==0xAA)
+		{
+			RASPAK_ARM(3,1,0xff);
+			for(ik=0;ik<28;ik++)REZ1_KS[ik]=0;
+		}
+		if(REZ2_KS[0]==0xAA)
+		{
+			RASPAK_ARM(4,1,0xff);
+			for(ik=0;ik<28;ik++)REZ2_KS[ik]=0;
+		}
+		END_ARM1=0;
+	}
+	return;
 }
 //============================================================================
 /***************************************\
@@ -1763,121 +1908,121 @@ void ANALIZ_ARM(void)
 \***************************************/
 void RASPAK_ARM(int bb,unsigned char STAT,int arm)
 {
-  unsigned char ARM,RAY;
+	unsigned char ARM,RAY;
 	int ii,jj,kvit;
-  if(bb!=0xff)
-  {
-    for(ii=0;ii<28;ii++)KOM_BUFER[ii]=0;
-    switch(bb) //перезапись данных
-    {
-      case 1: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=OSN1_KS[ii];break;
-      case 2: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=OSN2_KS[ii];break;
-      case 3: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=REZ1_KS[ii];break;
-      case 4: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=REZ2_KS[ii];break;
-      default: return;
-    }
-  }
-  else
-  {
-    if(arm!=0xff)ARM=arm;
-  }
-  if(KOM_BUFER[1]!=0)
-  { ARM=((KOM_BUFER[1]&0xf0)>>4)-4;  // выделение номера АРМа
-    if((KOM_BUFER[2]&0x20)==0x20)
-    {
-      KNOPKA_OK[ARM]=1;              // выделение признака ОК
-      OK_KNOPKA=OK_KNOPKA|(1<<ARM);
-    }
-    else
-    {
-      KNOPKA_OK[ARM]=0;
-      OK_KNOPKA=OK_KNOPKA&(~(1<<ARM));
-    }
-    RAY=KOM_BUFER[2]&0x3;            //выделение района
-    if(ACTIV!=1)
-    {
-      if((KOM_BUFER[2]&0x80)==0x80)  //если АРМ основной в районе
-      {
-        for(ii=0;ii<Narm;ii++)
-        {
-          if(KONFIG_ARM[ii][RAY-1]!=0)KONFIG_ARM[ii][RAY-1]=RAY;
-        }
-        KONFIG_ARM[ARM][RAY-1]=0xFF;
-      }
-      else KONFIG_ARM[ARM][RAY-1]=RAY;
+	if(bb!=0xff)
+	{
+		for(ii=0;ii<28;ii++)KOM_BUFER[ii]=0;
+		switch(bb) //перезапись данных
+		{
+			case 1: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=OSN1_KS[ii];break;
+			case 2: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=OSN2_KS[ii];break;
+			case 3: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=REZ1_KS[ii];break;
+			case 4: for(ii=0;ii<28;ii++)KOM_BUFER[ii]=REZ2_KS[ii];break;
+			default: return;
+		}
+	}
+	else
+	{
+		if(arm!=0xff)ARM=arm;
+	}
+	if(KOM_BUFER[1]!=0)
+	{ ARM=((KOM_BUFER[1]&0xf0)>>4)-4;  // выделение номера АРМа
+		if((KOM_BUFER[2]&0x20)==0x20)
+		{
+			KNOPKA_OK[ARM]=1;              // выделение признака ОК
+			OK_KNOPKA=OK_KNOPKA|(1<<ARM);
+		}
+		else
+		{
+			KNOPKA_OK[ARM]=0;
+			OK_KNOPKA=OK_KNOPKA&(~(1<<ARM));
+		}
+		RAY=KOM_BUFER[2]&0x3;            //выделение района
+		if(ACTIV!=1)
+		{
+			if((KOM_BUFER[2]&0x80)==0x80)  //если АРМ основной в районе
+			{
+				for(ii=0;ii<Narm;ii++)
+				{
+					if(KONFIG_ARM[ii][RAY-1]!=0)KONFIG_ARM[ii][RAY-1]=RAY;
+				}
+				KONFIG_ARM[ARM][RAY-1]=0xFF;
+			}
+			else KONFIG_ARM[ARM][RAY-1]=RAY;
 
-    }
-  }
-  //если поступила команда установки времени 
-  if((KOM_BUFER[3]==102)||(KOM_BUFER[3]==101))
-  {
-    for(ii=0;ii<7;ii++)KOM_TIME[ii]=KOM_BUFER[4+ii];//заполнить буфер команд
-    if(KOM_BUFER[11]>224)            //если вначале квитанции 
-    {
-      kvit=KOM_BUFER[11]-224;        //определить число квитанций и переписать
-      for(ii=0,jj=12;(ii<kvit)&&(jj<26);ii++,jj=jj+2)
-      KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
-    }
-//    add_ARM_IN(ARM,3); //записать принятое в архив 
+		}
+	}
+	//если поступила команда установки времени
+	if((KOM_BUFER[3]==102)||(KOM_BUFER[3]==101))
+	{
+		for(ii=0;ii<7;ii++)KOM_TIME[ii]=KOM_BUFER[4+ii];//заполнить буфер команд
+		if(KOM_BUFER[11]>224)            //если вначале квитанции
+		{
+			kvit=KOM_BUFER[11]-224;        //определить число квитанций и переписать
+			for(ii=0,jj=12;(ii<kvit)&&(jj<26);ii++,jj=jj+2)
+			KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
+		}
+//    add_ARM_IN(ARM,3); //записать принятое в архив
 		MAKE_TIME(ARM,STAT);
-    for(ii=0;ii<7;ii++)KOM_TIME[ii]=0;
-    for(ii=0;ii<28;ii++)KOM_BUFER[ii]=0;
-    return;
-  }
-  else
-  {
-    if(((KOM_BUFER[3]>0)&&(KOM_BUFER[3]<190))|| //если начало-раздельная команда
-    ((KOM_BUFER[3]>192)&&(KOM_BUFER[3]<203)))   //то переписать ее в буф. команд
-    {
-      for(ii=0,jj=3;ii<3,jj<6;ii++,jj++)KOMANDA_RAZD[ARM][STAT][ii]=KOM_BUFER[jj];
+		for(ii=0;ii<7;ii++)KOM_TIME[ii]=0;
+		for(ii=0;ii<28;ii++)KOM_BUFER[ii]=0;
+		return;
+	}
+	else
+	{
+		if(((KOM_BUFER[3]>0)&&(KOM_BUFER[3]<187))|| //если начало-раздельная команда
+		((KOM_BUFER[3]>192)&&(KOM_BUFER[3]<203)))   //то переписать ее в буф. команд
+		{
+			for(ii=0,jj=3;ii<3,jj<6;ii++,jj++)KOMANDA_RAZD[ARM][STAT][ii]=KOM_BUFER[jj];
 
-      if(KOM_BUFER[6]>224)               //если далее квитанции
-      { kvit=KOM_BUFER[6]-224;           //определить число квитанций
-        for(ii=0,jj=7;(ii<kvit)&&(jj<26);ii++,jj=jj+2)//переписать квитанции
-        KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
-      }
+			if(KOM_BUFER[6]>224)               //если далее квитанции
+			{ kvit=KOM_BUFER[6]-224;           //определить число квитанций
+				for(ii=0,jj=7;(ii<kvit)&&(jj<26);ii++,jj=jj+2)//переписать квитанции
+				KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
+			}
 //      if((KONFIG_ARM[ZAPROS_ARM][0]!=0xFF)&&
 //			(KONFIG_ARM[ZAPROS_ARM][1]!=0xFF))
 
 //      add_ARM_IN(ARM,3); //записать принятое в архив
 
-    }
-    else                              //если начало без команд
-    {
-      if(KOM_BUFER[3]>224)            //если вначале квитанции
-      {
-        kvit=KOM_BUFER[3]-224;        //определить число квитанций и переписать
-        for(ii=0,jj=4;(ii<kvit)&&(jj<26);ii++,jj=jj+2)
-        KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
-      }
-      else                            //если в начале нет квитанций
-      {
-        if((KOM_BUFER[3]>=190)&&(KOM_BUFER[3]<=192))  //вначале маршр. команда
-        {
-          for(ii=0,jj=3;ii<10,jj<13;ii++,jj++)        //команду в буфер
-          KOMANDA_MARS[ARM][STAT][ii]=KOM_BUFER[jj];
-          if(KOM_BUFER[13]>224)                       //если далее квитанции
-          {
-            kvit=KOM_BUFER[13]-224;                   // число квитанций
-            for(ii=0,jj=14;(ii<kvit)&&(jj<26);ii++,jj=jj+2)
-            KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
-          }
-        }
-      }
-    }
-    for(ii=0;ii<28;ii++)KOM_BUFER[ii]=0; //очистить буфер
-    ANALIZ_KVIT_ARM(ARM,STAT); //проанализировать квитанции АРМа
-    //если есть раздельная
-    if(KOMANDA_RAZD[ARM][STAT][0]!=0)
-    {
-      KVIT_ARMu[ARM][STAT][0]=KOMANDA_RAZD[ARM][STAT][1];
-      KVIT_ARMu[ARM][STAT][1]=KOMANDA_RAZD[ARM][STAT][2]|0x40;
-      KVIT_ARMu[ARM][STAT][2]=0;
-      //если есть первая раздельная и просмотр команд
+		}
+		else                              //если начало без команд
+		{
+			if(KOM_BUFER[3]>224)            //если вначале квитанции
+			{
+				kvit=KOM_BUFER[3]-224;        //определить число квитанций и переписать
+				for(ii=0,jj=4;(ii<kvit)&&(jj<26);ii++,jj=jj+2)
+				KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
+			}
+			else                            //если в начале нет квитанций
+			{
+				if((KOM_BUFER[3]>=187)&&(KOM_BUFER[3]<=192))  //вначале маршр. команда
+				{
+					for(ii=0,jj=3;ii<10,jj<13;ii++,jj++)        //команду в буфер
+					KOMANDA_MARS[ARM][STAT][ii]=KOM_BUFER[jj];
+					if(KOM_BUFER[13]>224)                       //если далее квитанции
+					{
+						kvit=KOM_BUFER[13]-224;                   // число квитанций
+						for(ii=0,jj=14;(ii<kvit)&&(jj<26);ii++,jj=jj+2)
+						KVIT_ARM[ARM][STAT][ii]=KOM_BUFER[jj]+(KOM_BUFER[jj+1]<<8);
+					}
+				}
+			}
+		}
+		for(ii=0;ii<28;ii++)KOM_BUFER[ii]=0; //очистить буфер
+		ANALIZ_KVIT_ARM(ARM,STAT); //проанализировать квитанции АРМа
+		//если есть раздельная
+		if(KOMANDA_RAZD[ARM][STAT][0]!=0)
+		{
+			KVIT_ARMu[ARM][STAT][0]=KOMANDA_RAZD[ARM][STAT][1];
+			KVIT_ARMu[ARM][STAT][1]=KOMANDA_RAZD[ARM][STAT][2]|0x40;
+			KVIT_ARMu[ARM][STAT][2]=0;
+			//если есть первая раздельная и просмотр команд
 			if((KOMANDA_RAZD[ARM][STAT][0]!=0)&&(REGIM==COMMAND))
 			{
 				if(Y_KOM!=3)putch1(' ',0x5,1,Y_KOM-1);    //погасить старый указатель
-				else putch1(' ',0x5,1,47);
+				else putch1(' ',0x5,1,46);
 				putch1(0x10,0x5,1,Y_KOM);                 //включить новый указатель
 				puts1(TIME,0xa,3,Y_KOM);
 
@@ -1893,7 +2038,7 @@ void RASPAK_ARM(int bb,unsigned char STAT,int arm)
 				if(((KOMANDA_RAZD[ARM][STAT][0]<=36)&&(KOMANDA_RAZD[ARM][STAT][0]>=31))||
 				(KOMANDA_RAZD[ARM][STAT][0]==79)||(KOMANDA_RAZD[ARM][STAT][0]==80)||(KOMANDA_RAZD[ARM][STAT][0]==85))
 				Y_KOM++;
-				if(Y_KOM>=48)Y_KOM=3;
+				if(Y_KOM>=47)Y_KOM=3;
 			}
 			MAKE_KOMANDA(ARM,STAT,RAY);
 			for(ii=0;ii<16;ii++)KOMANDA_RAZD[ARM][STAT][ii]=0;
@@ -1908,7 +2053,7 @@ void RASPAK_ARM(int bb,unsigned char STAT,int arm)
 			if((KOMANDA_MARS[ARM][STAT][0]!=0)&&(REGIM==COMMAND)) //если есть маршрутная
 			{
 				if(Y_KOM!=3)putch1(' ',0xc,1,Y_KOM-1); //погасить старый указатель
-				else putch1(' ',0xc,1,47);
+				else putch1(' ',0xc,1,46);
 				putch1(0x10,0xc,1,Y_KOM);//включить новый указатель
 				puts1(TIME,0xa,3,Y_KOM);
 				t1=KOMANDA_MARS[ARM][STAT][0];
@@ -2432,7 +2577,7 @@ void sbros_kom(void)
     for(j=0;j<15;j++)
     {
       KOMANDA_ST[i][j]=0;
-      KOMANDA_TUMS[i][j]=0;
+			KOMANDA_TUMS[i][j]=0;
     }
   for(i=0;i<3;i++)DIAGNOZ[i]=0;
   for(i=0;i<6;i++)ERR_PLAT[i]=0;
@@ -2441,14 +2586,15 @@ void sbros_kom(void)
 }
 //****************************************************
 void ACTIVNOST(void)
-{
-  ACTIV=1;
+{ int i_m;
+	ACTIV=1;
   SET_TIME=0xF;
   cikl_arm=0;
   ZAPROS_TUMS=0; ZAPROS_TUMS1=3;
   ZAPROS_ARM=4; ZAPROS_ARM1=8;
   ACTIV_SERV=SERVER;
-  sbros_kom();
+	sbros_kom();
+	for(i_m=0;i_m<Nst*3;i_m++)DeleteMarsh(i_m);
   cikl_in_pred=0; cikl_out_pred=0;
   cikl_in_next=0; cikl_out_next=0;
   outportb(ADR_SERV_NEXT+2,0xC7); outportb(ADR_SERV_PRED+2,0xC7);

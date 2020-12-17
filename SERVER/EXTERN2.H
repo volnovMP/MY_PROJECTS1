@@ -16,10 +16,14 @@
 #include <TIME.H>
 extern void (interrupt far *s_vect1)(); //хранитель старого вектора IRQ5
 extern void (interrupt far *s_vect2)(); //хранитель старого вектора IRQ7
-extern void (interrupt far *s_timer)(); //хранитель старого вектора таймера 
+extern void (interrupt far *s_timer)(); //хранитель старого вектора таймера
 extern void interrupt far reading_char1();//обработчик прерываний магистралей ТУМС
-extern void interrupt far reading_char2();//обработчик прерываний магистралей АРМ 
-extern void interrupt far TIMER_TIC();//обработчик прерываний СИСТЕМНОГО ТАЙМЕРА 
+extern void interrupt far reading_char2();//обработчик прерываний магистралей АРМ
+#ifdef WORK
+extern void interrupt far TIMER_TIC();//обработчик прерываний СИСТЕМНОГО ТАЙМЕРА
+#else
+void TIMER_TIC();//имитация обработчика прерываний СИСТЕМНОГО ТАЙМЕРА
+#endif
 extern void interrupt far PRNTSCR();//обработчик прерываний PRNSCR
 extern void interrupt far CNTRLBREAK();//обработчик прерываний CNTRLBREAK
 extern void interrupt far KEYBRD();//обработчик прерываний клавиатуры
@@ -108,7 +112,7 @@ unsigned char CalculateCRC8(void *pData, int dataLen);
 void MAKE_TIME(int ARM,int STAT);
 void read_FR3(int nomer);
 void write_FR3(int nomer);
-void Soob_For_Arm(int ARM_IN,int nom_mar,int sos);
+void Soob_For_Arm(int nom_mar,int sos,int kod_er);
 void ZERO_TRASSA(void);
 void ZERO_TRASSA1(void);
 void DeleteMarsh(int i_m);
@@ -143,7 +147,6 @@ extern unsigned int crc16_table[256];
 extern unsigned char crc8_table[256],KOM_BUFER[28];;
 
 extern unsigned int
-RASFASOVKA,    //признак наличия нерозданных глобальных маршрутов (если !=0 )
 SVAZ_TUMS[Nst],
 VVOD_OBJ,
 OBJECT_ARM,
@@ -170,30 +173,35 @@ first_time,
 long_test;
 
 extern unsigned int error1,error2,
+CIKL_MAIN,	//$$$$ - 14_04_07 $$$$ - переменная определения четного и нечетного основного цикла
+KOL_VYD_MARSH[Nst],//$$$$ счетчик числа раз выдачи одного маршрута (разрешен только один повтор выдачи)
 Schet_Com[Nst],
 Schet_Takt[Nst],
-KOL_VO,  //общее число объектов на станции 
+KOL_VO,  //общее число объектов на станции
 chas_,
 min_,
 sec_,
+PAROL,//$$$$ - 14_04_07 - добавлена для выхода при двух работающих серверах
 povtor_out,
+POVTOR_OTKR,
 FLAG_KOM,
-PAKET[32][2],//контрольные суммы CRC-16 для номеров переданных пакетов 
-MYTHX[Nst],  //признаки состояния маршрутов в стойках 
-NOVIZNA[MAX_NEW], //массив последней принятой новизны 
+PAKET[32][2],//контрольные суммы CRC-16 для номеров переданных пакетов
+MYTHX[Nst],  //признаки состояния маршрутов в стойках
+TUMS_RABOT[Nst], //признак занятости стойки
+NOVIZNA[MAX_NEW], //массив последней принятой новизны
 NOVIZNA_FR4[10], //массив последней новизны для FR4
-BD_OSN[1900][17],  //строка описания объекта 
+BD_OSN[1900][17],  //строка описания объекта
 inp_ob[1900],
 out_ob[1900],
 bd_osn[16],
 nom_new, //указатель номера элемента массива новизны для следующей записи
 new_fr4, //указатель номера элемента массива новизны для следующей записи
 nom_per,
-FR4_NEXT, //указатель на объект для следующего сервера 
-FR4_PRED, //указатель на объект для предыдущего сервера 
+FR4_NEXT, //указатель на объект для следующего сервера
+FR4_PRED, //указатель на объект для предыдущего сервера
 mld_ba,str_ba, //делители для каналов обмена ТУМС
-mld_ba1,str_ba1,            //делители для каналов обмена АРМ 
-mld_ba2,str_ba2,            //делители для каналов сервера 
+mld_ba1,str_ba1,            //делители для каналов обмена АРМ
+mld_ba2,str_ba2,            //делители для каналов сервера
 V1,//вектор для обработки irq5
 V2,//вектор для обработки irq7
 VT,//вектор для обработки таймерного прерывания
@@ -246,6 +254,7 @@ SHET_KOM[Nst],  //счетчик повторов выдачи разовых команд (если не было квитанции
 SHET_MARSH[Nst],//счетчик повторов выдачи маршрутов (если не было квитанции)
 tiki_tum[Nst],
 PAUZA,
+PAROL_TXT[4], //$$$$ - 14_04_07 - добавлена для выхода при двух работающих серверах
 SERVER,       //номер текущего сервера 
 SERVER_PRED,//номер предыдущего сервера 
 SERVER_NEXT,  //номер следующего сервера 
@@ -415,27 +424,33 @@ extern unsigned int
   KVIT_ARM[Narm][2][18],//регистры хранения контрольных сумм, принятых из АРМ
   STR[Nst],
   SIG[Nst],
-  DOP[Nst],
-  UCH[Nst],
+	DOP[Nst],
+	DOP_B[Nst],
+	DOP_D[Nst],
+	DOP_T[Nst],
+	UCH[Nst],
   PUT[Nst],
   UPR[Nst],
   DGN[Nst],
   N_SOOB[Nst],//число информационных сообщений от стойки ТУМС
-  str[5],
-  SPSTR[100][5],
-  spstr[5],
-  SPSIG[100][5],
-  spsig[5],
-  SPDOP[100][5],
-	spdop[5],
+
+	SPSTR[100][5],
+
+	SPSIG[100][5],
+
+	SPDOP[100][5],
+	SPDOP_B[100][5],
+	SPDOP_D[100][5],
+	SPDOP_T[100][5],
+
 	SPKON[100][5],
-	spkon[5],
+
 	SPSP[100][10],
 	SPPUT[100][10];
 extern int
 	flag_err,
 	file_arc,
-  ISPOLNIT[Nst*3],
+	ISPOLNIT[Nst*3],
 //  file_arm_in,
 //  file_arm_out,
   ho_ur,
@@ -480,12 +495,12 @@ extern struct MARS_ALL
 
 extern struct MARS_ST
 {
-	char NEXT_KOM[13];
+	char NEXT_KOM[14];
 	char NUM;
 	unsigned char SOST;
 	time_t T_VYD;
 	long T_MAX;
-}MARSHRUT_ST[Nst][3];
+}MARSHRUT_ST[Nst][MARS_STOY];
 
 extern struct PAKET
 {

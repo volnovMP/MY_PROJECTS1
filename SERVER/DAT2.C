@@ -4,7 +4,9 @@ void (interrupt far *s_vect2)(); //хранитель старого вектора IRQ7
 void (interrupt far *s_timer)(); //хранитель старого вектора таймера
 void interrupt far reading_char1();//обработчик прерываний магистралей ТУМС
 void interrupt far reading_char2();//обработчик прерываний магистралей АРМ
+#ifdef WORK
 void interrupt far TIMER_TIC();//обработчик прерываний СИСТЕМНОГО ТАЙМЕРА
+#endif
 void interrupt far PRNTSCR();//обработчик прерываний PRNSCR
 void interrupt far CNTRLBREAK();//обработчик прерываний CNTRLBREAK
 void interrupt far KEYBRD();//обработчик прерываний клавиатуры
@@ -64,7 +66,7 @@ unsigned char crc8_table[256]={
 unsigned int  crc16_table[256]={
   0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50A5, 0x60C6, 0x70E7,
   0x8108, 0x9129, 0xA14A, 0xB16B, 0xC18C, 0xD1AD, 0xE1CE, 0xF1EF,
-  0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
+	0x1231, 0x0210, 0x3273, 0x2252, 0x52B5, 0x4294, 0x72F7, 0x62D6,
   0x9339, 0x8318, 0xB37B, 0xA35A, 0xD3BD, 0xC39C, 0xF3FF, 0xE3DE,
   0x2462, 0x3443, 0x0420, 0x1401, 0x64E6, 0x74C7, 0x44A4, 0x5485,
   0xA56A, 0xB54B, 0x8528, 0x9509, 0xE5EE, 0xF5CF, 0xC5AC, 0xD58D,
@@ -112,19 +114,23 @@ second_time,
 first_time;
 
 unsigned int error1=0,error2=0,
+CIKL_MAIN=0,
+KOL_VYD_MARSH[Nst], //13_04_07 добавлена глобальная переменная для учета числа повторных выдач маршрута в стойку
 Schet_Com[Nst],
 Schet_Takt[Nst],
-RASFASOVKA,
 SVAZ_TUMS[Nst],
 KOL_VO,
 chas_,
 min_,
 sec_,
+PAROL,
 povtor_out=1,
+POVTOR_OTKR=0,
 FLAG_KOM,
 FR4_NEXT=0, //указатель на объект для следующего сервера
 FR4_PRED=0, //указатель на объект для предыдущего сервера
 MYTHX[Nst],
+TUMS_RABOT[Nst],
 NOVIZNA[MAX_NEW],
 NOVIZNA_FR4[10],
 new_fr4,
@@ -184,6 +190,7 @@ KOM_BUFER[28],
 MARSH_VYDAN[Nst],
 KORZINA[Nst],
 OK_KNOPKA,
+PAROL_TXT[4],
 SHET_KOM[Nst],
 SHET_MARSH[Nst],
 tiki_tum[Nst],
@@ -317,28 +324,34 @@ unsigned int
   OBJECT_SERV,
   NOMER_OB_ARM[4],
   X_VVOD1=1,
-  KVIT_ARM[Narm][2][18],
-  STR[Nst]={3,4,3,4,3,5,1},
-  SIG[Nst]={6,8,5,7,4,7,1},
-  DOP[Nst]={8,4,11,7,9,6,24},
-  UCH[Nst]={8,12,6,8,7,10,2},
-  PUT[Nst]={3,4,3,4,3,3,1},
-  UPR[Nst]={5,5,5,5,5,5,5},
-  DGN[Nst]={9,9,9,9,9,9,8},
-  X_ANALIZ_OUT,
-  X1_ANALIZ_OUT,
-  Y_ANALIZ_OUT,
-  Y1_ANALIZ_OUT,
-  N_SOOB[Nst]={33,37,33,35,31,36,34,0},
-  str[5],
-  spstr[5],
-  SPSTR[100][5],
-  spsig[5],
-  SPSIG[100][5],
-	spdop[5],
+	KVIT_ARM[Narm][2][18],
+	STR[Nst]=	 {3, 4, 3, 4, 3, 5, 1, 1},
+	SIG[Nst]=	 {6, 8, 5, 7, 4, 7, 1, 1},
+	DOP[Nst]=	 {8, 4,11, 7, 9, 6,24, 6},
+	DOP_B[Nst]={0, 0, 0, 0, 0, 0, 0, 8},
+	DOP_D[Nst]={0, 0, 0, 0, 0, 0, 0, 4},
+	DOP_T[Nst]={0, 0, 0, 0, 0, 0, 0, 4},
+	UCH[Nst]=	 {8,12, 6, 8, 7,10, 2, 2},
+	PUT[Nst]=  {3, 4, 3, 4, 3, 3, 1, 1},
+	UPR[Nst]=  {5, 5, 5, 5, 5, 5, 5, 4},
+	DGN[Nst]=  {9, 9, 9, 9, 9, 9, 8, 9},
+	X_ANALIZ_OUT,
+	X1_ANALIZ_OUT,
+	Y_ANALIZ_OUT,
+	Y1_ANALIZ_OUT,
+	N_SOOB[Nst]={33,37,33,35,31,36,34,0},
+
+	SPSTR[100][5],
+
+	SPSIG[100][5],
+
 	SPDOP[100][5],
-	spkon[5],
+	SPDOP_B[100][5],
+	SPDOP_D[100][5],
+	SPDOP_T[100][5],
+
 	SPKON[100][5],
+
 	SPSP[100][10],
   SPPUT[100][10];
 int
@@ -365,7 +378,7 @@ int
   out_fil,
   spstr_fil,
   spsig_fil,
-  spdop_fil,
+	spdop_fil,
   spkon_fil,
   spspu_fil,
   spdgn_fil,
@@ -374,7 +387,7 @@ int
 
 struct PAKET PAKETs[32];
 struct MARS_ALL MARSHRUT_ALL[Nst*3];
-struct MARS_ST MARSHRUT_ST[Nst][3];
+struct MARS_ST MARSHRUT_ST[Nst][MARS_STOY];
 struct OBJect OBJ_ARMu[32],OBJ_ARMu1[32];
 struct TRAS TRASSA[200],TRASSA1[200];
 union REGS rg;

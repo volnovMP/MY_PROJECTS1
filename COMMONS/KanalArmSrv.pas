@@ -1657,7 +1657,22 @@ loop:
           begin                      // состояние датчика FR3
             if (w <> WorkMode.ServerStateSoob) and (w <> WorkMode.ArmStateSoob) and (w <> WorkMode.DirectStateSoob) then
             begin // если не специализированные датчики - считать
-              if pb <> FR3inp[w] then// новизна
+              if ((w = 340) or (w = 341)) then
+              begin
+                if pb <> char(1) then pb := char(1)
+                else pb := char(0);
+              end;
+               if (w < 1000) and (w > 300) then
+               begin
+                 if FR3Gora[w] <> Byte(pb) then
+                 begin
+                  NEW_FR3[novizna_FR3] := w;
+                  novizna_FR3 := novizna_FR3 + 1;
+                  if novizna_FR3 > 20 then novizna_FR3 := 1;
+                end;
+                 FR3Gora[w] := Byte(pb);
+               end;
+              if pb <> FR3inp[w] then  // новизна
               begin
                 FR3inp[w] := pb;
                 NewFR[kanal] := NewFR[kanal] + char(bl) + char(bh) + pb;

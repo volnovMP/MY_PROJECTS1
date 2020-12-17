@@ -56,7 +56,7 @@ procedure UpdateKeyList(index : integer); // обновить список датчиков объекта
 begin
   ValueListDlg.ValList.Strings.Clear;
   TabloMain.TimerView.Enabled := true;
-  if not ValueListDlg.Visible then ValueListDlg.Show;
+//$$  if not ValueListDlg.Visible then ValueListDlg.Show;
 end;
 
 procedure UpdateValueList(index : integer); // обновить информацию о состоянии датчиков объекта
@@ -65,7 +65,7 @@ begin
   if not ValueListDlg.Visible then exit;
   ValueListDlg.ValList.Strings.Clear;
   case ObjZav[index].TypeObj of
-    2 : begin // стрелка
+    2 : begin //------------------------------------------------------------------ стрелка
       if ObjZav[ObjZav[index].BaseObject].ObjConstI[9] > 0 then
       begin // спаренная стрелка
         o := ObjZav[index].BaseObject;
@@ -177,75 +177,124 @@ begin
         if st then ValueListDlg.ValList.Values['Движение пш'] := 'закрыто' else ValueListDlg.ValList.Values['Движение пш'] := 'разрешено';
       end;
     end;
-    3 : begin // СП,УП
+    3 : begin //-------------------------------------------------------------------- СП,УП
       o := index;
       ValueListDlg.Caption := 'Свойства : '+ ObjZav[index].Liter;
-      nep := false; rdy := true; st := GetFR3(ObjZav[o].ObjConstI[2],nep,rdy);
-      if nep then ValueListDlg.ValList.Values['Занятость'] := 'непарафазность' else if not rdy then ValueListDlg.ValList.Values['Занятость'] := 'нет данных' else
-      if st then ValueListDlg.ValList.Values['Занятость'] := 'есть' else ValueListDlg.ValList.Values['Занятость'] := 'нет';
-      nep := false; rdy := true; st := GetFR3(ObjZav[o].ObjConstI[3],nep,rdy);
-      if nep then ValueListDlg.ValList.Values['Замыкание'] := 'непарафазность' else if not rdy then ValueListDlg.ValList.Values['Замыкание'] := 'нет данных' else
-      if st then ValueListDlg.ValList.Values['Замыкание'] := 'есть' else ValueListDlg.ValList.Values['Замыкание'] := 'нет';
-      nep := false; rdy := true; st := GetFR3(ObjZav[o].ObjConstI[4],nep,rdy);
-      if nep then ValueListDlg.ValList.Values['РИ'] := 'непарафазность' else if not rdy then ValueListDlg.ValList.Values['РИ'] := 'нет данных' else
-      if st then ValueListDlg.ValList.Values['РИ'] := 'есть' else ValueListDlg.ValList.Values['РИ'] := 'нет';
+      nep := false;
+      rdy := true;
+      st := GetFR3(ObjZav[o].ObjConstI[2],nep,rdy);
+      if nep then ValueListDlg.ValList.Values['Занятость'] := 'непарафазность'
+      else
+        if not rdy then ValueListDlg.ValList.Values['Занятость'] := 'нет данных' else
+      if st then ValueListDlg.ValList.Values['Занятость'] := 'есть'
+      else ValueListDlg.ValList.Values['Занятость'] := 'нет';
+      nep := false;
+      rdy := true;
+      st := GetFR3(ObjZav[o].ObjConstI[3],nep,rdy);
+      if nep then ValueListDlg.ValList.Values['Замыкание'] := 'непарафазность'
+      else
+        if not rdy then ValueListDlg.ValList.Values['Замыкание'] := 'нет данных'
+        else
+          if st then ValueListDlg.ValList.Values['Замыкание'] := 'есть'
+          else ValueListDlg.ValList.Values['Замыкание'] := 'нет';
+      nep := false;
+      rdy := true;
+      st := GetFR3(ObjZav[o].ObjConstI[4],nep,rdy);
+      if nep then ValueListDlg.ValList.Values['РИ'] := 'непарафазность'
+      else
+        if not rdy then ValueListDlg.ValList.Values['РИ'] := 'нет данных'
+        else
+          if st then ValueListDlg.ValList.Values['РИ'] := 'есть'
+          else ValueListDlg.ValList.Values['РИ'] := 'нет';
       if ObjZav[o].ObjConstI[5] > 0 then
       begin
-        nep := false; rdy := true; st := GetFR3(ObjZav[o].ObjConstI[5],nep,rdy);
-        if nep then ValueListDlg.ValList.Values['МСП'] := 'непарафазность' else if not rdy then ValueListDlg.ValList.Values['МСП'] := 'нет данных' else
-        if st then ValueListDlg.ValList.Values['МСП'] := 'есть' else ValueListDlg.ValList.Values['МСП'] := 'нет';
+        nep := false;
+        rdy := true;
+        st := GetFR3(ObjZav[o].ObjConstI[5],nep,rdy);
+        if nep then ValueListDlg.ValList.Values['МСП'] := 'непарафазность'
+        else
+          if not rdy then ValueListDlg.ValList.Values['МСП'] := 'нет данных'
+          else
+            if st then ValueListDlg.ValList.Values['МСП'] := 'есть'
+            else ValueListDlg.ValList.Values['МСП'] := 'нет';
         if ObjZav[o].dtParam[3] > 0 then
         begin
-          DateTimeToString(s,'s,z',ObjZav[o].dtParam[3]); ValueListDlg.ValList.Values['Тмсп'] := s;
+          DateTimeToString(s,'s,z',ObjZav[o].dtParam[3]);
+          ValueListDlg.ValList.Values['Тмсп'] := s;
         end;
       end;
       if ObjZav[o].ObjConstI[6] > 0 then
       begin
-        nep := false; rdy := true; st := GetFR3(ObjZav[o].ObjConstI[6],nep,rdy);
-        if nep then ValueListDlg.ValList.Values['МИ'] := 'непарафазность' else if not rdy then ValueListDlg.ValList.Values['МИ'] := 'нет данных' else
-        if st then ValueListDlg.ValList.Values['МИ'] := 'есть' else ValueListDlg.ValList.Values['МИ'] := 'нет';
+        nep := false;
+        rdy := true;
+        st := GetFR3(ObjZav[o].ObjConstI[6],nep,rdy);
+        if nep then ValueListDlg.ValList.Values['МИ'] := 'непарафазность'
+        else
+          if not rdy then ValueListDlg.ValList.Values['МИ'] := 'нет данных'
+          else
+            if st then ValueListDlg.ValList.Values['МИ'] := 'есть'
+            else ValueListDlg.ValList.Values['МИ'] := 'нет';
       end;
       if (ObjZav[o].dtParam[1] > 0) or (ObjZav[o].siParam[1] > 0) then
       begin
         if ObjZav[o].dtParam[1] > 0 then
         begin
-          DateTimeToString(s,'dd/mm/yy hh:nn:ss',ObjZav[o].dtParam[1]); ValueListDlg.ValList.Values['Занятие секции'] := s;
-        end else ValueListDlg.ValList.Values['Занятие секции'] := 'не зафиксировано';
-        if ObjZav[o].siParam[1] > 0 then ValueListDlg.ValList.Values['Количество з.'] := IntToStr(ObjZav[o].siParam[1]);
+          DateTimeToString(s,'dd/mm/yy hh:nn:ss',ObjZav[o].dtParam[1]);
+          ValueListDlg.ValList.Values['Занятие секции'] := s;
+        end
+        else ValueListDlg.ValList.Values['Занятие секции'] := 'не зафиксировано';
+        if ObjZav[o].siParam[1] > 0 then
+        ValueListDlg.ValList.Values['Количество з.'] := IntToStr(ObjZav[o].siParam[1]);
       end;
       if (ObjZav[o].dtParam[2] > 0) or (ObjZav[o].siParam[2] > 0) then
       begin
         if ObjZav[o].dtParam[2] > 0 then
         begin
-          DateTimeToString(s,'dd/mm/yy hh:nn:ss',ObjZav[o].dtParam[2]); ValueListDlg.ValList.Values['Освобождение секции'] := s;
-        end else ValueListDlg.ValList.Values['Освобождение секции'] := 'не зафиксировано';
-        if ObjZav[o].siParam[2] > 0 then ValueListDlg.ValList.Values['Количество с.'] := IntToStr(ObjZav[o].siParam[2]);
+          DateTimeToString(s,'dd/mm/yy hh:nn:ss',ObjZav[o].dtParam[2]);
+          ValueListDlg.ValList.Values['Освобождение секции'] := s;
+        end
+        else ValueListDlg.ValList.Values['Освобождение секции'] := 'не зафиксировано';
+        if ObjZav[o].siParam[2] > 0 then
+        ValueListDlg.ValList.Values['Количество с.'] := IntToStr(ObjZav[o].siParam[2]);
       end;
       st := GetFR4State(ObjZav[o].ObjConstI[1]*8+2);
-      if st then ValueListDlg.ValList.Values['Движение'] := 'закрыто' else ValueListDlg.ValList.Values['Движение'] := 'разрешено';
+      if st then ValueListDlg.ValList.Values['Движение'] := 'закрыто'
+      else ValueListDlg.ValList.Values['Движение'] := 'разрешено';
       if ObjZav[o].ObjConstB[8] or ObjZav[o].ObjConstB[9] then
       begin
         st := GetFR4State(ObjZav[o].ObjConstI[1]*8+3);
-        if st then ValueListDlg.ValList.Values['Движение эл.т.'] := 'закрыто' else ValueListDlg.ValList.Values['Движение эл.т.'] := 'разрешено';
+        if st then ValueListDlg.ValList.Values['Движение эл.т.'] := 'закрыто'
+        else ValueListDlg.ValList.Values['Движение эл.т.'] := 'разрешено';
         if ObjZav[o].ObjConstB[8] and ObjZav[o].ObjConstB[9] then
         begin
           st := GetFR4State(ObjZav[o].ObjConstI[1]*8);
-          if st then ValueListDlg.ValList.Values['Движение пост.т.'] := 'закрыто' else ValueListDlg.ValList.Values['Движение пост.т.'] := 'разрешено';
+          if st then ValueListDlg.ValList.Values['Движение пост.т.'] := 'закрыто'
+          else ValueListDlg.ValList.Values['Движение пост.т.'] := 'разрешено';
           st := GetFR4State(ObjZav[o].ObjConstI[1]*8+1);
-          if st then ValueListDlg.ValList.Values['Движение пер.т.'] := 'закрыто' else ValueListDlg.ValList.Values['Движение пер.т.'] := 'разрешено';
+          if st then ValueListDlg.ValList.Values['Движение пер.т.'] := 'закрыто'
+          else ValueListDlg.ValList.Values['Движение пер.т.'] := 'разрешено';
         end;
       end;
     end;
     4 : begin // П
       o := index;
       ValueListDlg.Caption := 'Свойства : '+ ObjZav[index].Liter;
-      if (ObjZav[o].ObjConstI[2] <> ObjZav[o].ObjConstI[9]) and (ObjZav[o].ObjConstI[2] > 0) and (ObjZav[o].ObjConstI[9] > 0) then
+      if (ObjZav[o].ObjConstI[2] <> ObjZav[o].ObjConstI[9])
+      and (ObjZav[o].ObjConstI[2] > 0) and (ObjZav[o].ObjConstI[9] > 0) then
       begin
         nep := false; rdy := true; st := GetFR3(ObjZav[o].ObjConstI[2],nep,rdy);
-        if nep then ValueListDlg.ValList.Values['Занятость(ч)'] := 'непарафазность' else if not rdy then ValueListDlg.ValList.Values['Занятость(ч)'] := 'нет данных' else
-        if st then ValueListDlg.ValList.Values['Занятость(ч)'] := 'есть' else ValueListDlg.ValList.Values['Занятость(ч)'] := 'нет';
-        nep := false; rdy := true; st := GetFR3(ObjZav[o].ObjConstI[9],nep,rdy);
-        if nep then ValueListDlg.ValList.Values['Занятость(н)'] := 'непарафазность' else if not rdy then ValueListDlg.ValList.Values['Занятость(н)'] := 'нет данных' else
+        if nep then ValueListDlg.ValList.Values['Занятость(ч)'] := 'непарафазность'
+        else
+          if not rdy then ValueListDlg.ValList.Values['Занятость(ч)'] := 'нет данных'
+          else
+            if st then ValueListDlg.ValList.Values['Занятость(ч)'] := 'есть'
+            else ValueListDlg.ValList.Values['Занятость(ч)'] := 'нет';
+        nep := false;
+        rdy := true;
+        st := GetFR3(ObjZav[o].ObjConstI[9],nep,rdy);
+        if nep then ValueListDlg.ValList.Values['Занятость(н)'] := 'непарафазность'
+        else
+          if not rdy then ValueListDlg.ValList.Values['Занятость(н)'] := 'нет данных' else
         if st then ValueListDlg.ValList.Values['Занятость(н)'] := 'есть' else ValueListDlg.ValList.Values['Занятость(н)'] := 'нет';
       end else
       if ObjZav[o].ObjConstI[2] > 0 then

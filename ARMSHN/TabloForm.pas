@@ -6,7 +6,8 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  ExtCtrls, ImgList, StdCtrls, ComCtrls, Registry, Menus, MMSystem, comport;
+  ExtCtrls, ImgList, StdCtrls, ComCtrls, Registry, Menus, MMSystem,  CRCCALC,
+  comport;
 
 type
   TTabloMain = class(TForm)
@@ -32,6 +33,7 @@ type
     pmArxiv: TMenuItem;
     ilClock: TImageList;
     DC: TTimer;
+    TimerGora: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure FormPaint(Sender: TObject);
     procedure FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -53,6 +55,7 @@ type
     procedure pmPhotoClick(Sender: TObject);
     procedure pmArxivClick(Sender: TObject);
     procedure DCTimer(Sender: TObject);
+    procedure TimerGoraTimer(Sender: TObject);
   private
     function RefreshTablo : Boolean; // Обновление образа табло
     procedure SaveArcToFloppy;       // сохранить архив работы на дискете
@@ -76,10 +79,19 @@ var
   IsCloseRMDSP   : Boolean;
   AppStart       : Boolean;
   SendToSrvCloseRMDSP : Boolean;
-
+  Zagol  : array[1..4] of Byte;          //принятый заголовок
+  Bufer_Out : array[1..70] of Byte;
+  FR3Gora : array [1..1000] of Byte;    //массив состояния объектов
+  FR4Gora : array [1..700] of Byte;    //массив ограничений для объектов
+  OutGora : array [1..700] of Byte;    //метки селективности для передачи на гору
   shiftxscr : integer; // сдвиг картинки
   shiftyscr : integer; // сдвиг картинки
-
+  NEW_FR3 : array [1..20] of integer;  //массив номеров объектов c выявленной новизной
+  NEW_FR4 : array [1..20] of integer;  //массив номеров объектов с выявленной новизной ограничений
+  last_fr3 : integer;     //указатель на последний переданный объект
+  novizna_FR3 : integer;  //указатель на ячейку фиксации новизны ообъекта
+  novizna_FR4 : integer;  //указатель на ячейку фиксации новизны ограничения
+  May_out : integer;
 procedure ChangeRegion(RU : Byte);
 procedure ResetCommands;                    // сброс всех активных команд
 
@@ -108,6 +120,7 @@ uses
   Load,
   KanalArmSrv,
   KanalArmDC,
+  KanalGora,
   Objsost,
   Commands,
   MainLoop,
@@ -140,7 +153,8 @@ begin
 end;
 
 procedure TTabloMain.FormCreate(Sender: TObject);
-  var err: boolean; i,h : integer; sr : TSearchRec;
+  var err: boolean; i,h,j : integer; sr : TSearchRec;
+  BUF : Array [1..3] of Byte;
 begin
   hWaitKanal := CreateEvent(nil,false,false,nil); // создать пустое событие для обработки длинных цыклов
   Caption := 'АРМ ШН - Контроль станции в реальном времени';
@@ -172,6 +186,7 @@ begin
   if Reg.OpenKey(KeyName, false) then
   begin
     if reg.ValueExists('databasepath') then database    := reg.ReadString('databasepath') else begin err := true; reportf('Нет ключа "databasepath"'); end;
+    if reg.ValueExists('gorabasepath') then gorabase    := reg.ReadString('gorabasepath') else begin err := true; reportf('Нет ключа "gorabasepath"'); end;
     if reg.ValueExists('path')         then config.path := reg.ReadString('path')         else begin err := true; reportf('Нет ключа "path"'); end;
     if reg.ValueExists('arcpath')      then config.arcpath := reg.ReadString('arcpath')   else begin err := true; reportf('Нет ключа "arcpath"'); end;
     if reg.ValueExists('ru')           then config.ru   := reg.ReadInteger('ru')          else begin err := true; reportf('Нет ключа "ru"'); end;
@@ -200,6 +215,26 @@ begin
       KanalSrv[2].Index := i;
     end else
     begin KanalSrv[2].Index := 0; err := true; reportf('Нет ключа "kanal2"'); end;
+
+    if reg.ValueExists('kanalgora') then
+    begin
+      i := reg.ReadInteger('kanalgora');
+      if i = 0 then reportf('Канал обмена с горой отключен.');
+      KanalGora1.Index := i;
+    end else
+      KanalGora1.Index := 0;
+    if KanalGora1.Index > 0 then
+    begin
+      if reg.ValueExists('configgora')  then
+      begin
+        s := reg.ReadString('configgora');
+        KanalGora1.config := s;
+      end else
+      begin
+        err := true;
+        s := ''; reportf('Нет ключа "configgora"');
+      end;
+    end;
 
     if reg.ValueExists('kanaldc1') then
     begin
@@ -245,6 +280,11 @@ begin
     InitKanalDC(1);
     InitKanalDC(2);
   end;
+  if KanalGora1.Index > 0 then
+  begin
+    CreateKanalGora;
+    InitKanalGora;
+  end;
 
   Tablo1 := TBitmap.Create;
   Tablo2 := TBitmap.Create;
@@ -282,7 +322,17 @@ begin
   ObjectWav.Add(config.path+'media\sound4.wav');
   ObjectWav.Add(config.path+'media\sound5.wav');
   ObjectWav.Add(config.path+'media\sound6.wav');
-
+  //Загрузка фильтра для горки
+  i := FileOpen(gorabase,fmOpenRead);
+  j := 1;
+  h := 3;
+  while h = 3 do
+  begin
+    h := FileRead(i,BUF,3);
+    OutGora[j] := BUF[1];
+    j := j+1;
+  end;
+   FileClose(i);
   // Загрузка базы данных
   if not LoadBase(database) then err := true;
   if configRU[1].TabloSize.X > 0 then pmmRU1.Visible := true else pmmRU1.Visible := false;
@@ -356,6 +406,8 @@ begin
     ConnectKanalDC(1); ConnectKanalDC(2);
   end;
 
+  ConnectKanalGora;
+
   MainTimer.Enabled := true;
   LastRcv := Date+Time;
   StartRM := true;           // выполнить процедуры старта системы
@@ -380,6 +432,7 @@ begin
       DisconnectKanalDC(1);
       DisconnectKanalDC(2);
     end;
+      DisconnectKanalGora;
     MainTimer.Enabled := false; lock_maintimer := false;
     FixStatKanal(1); FixStatKanal(2);
     if KanalDC[1].Index > 0 then // каналы ДЦ
@@ -451,7 +504,7 @@ end;
 //------------------------------------------------------------------------------
 // прорисовка на экране элементов управления
 procedure TTabloMain.FormPaint(Sender: TObject);
-  var shiftx,shifty : integer;
+  var shiftx,shifty,tst : integer;
 begin
   shiftx := HorzScrollBar.Position;
   shifty := VertScrollBar.Position;
@@ -472,12 +525,12 @@ begin
 end;
 
 procedure TTabloMain.DrawTablo(tablo: TBitmap);
-  var i,x,c : integer;
+  var i,x,c,tst : integer;
 begin
   Tablo.Canvas.Lock;
   Tablo.Canvas.Brush.Color := bkgndcolor;
   Tablo.canvas.FillRect(rect(0, 0, tablo.width, tablo.height));
-
+ {
   // прорисовка полки со значками
   Tablo.Canvas.Pen.Color := armcolor8; Tablo.Canvas.Brush.Color := armcolor18; Tablo.Canvas.Pen.Style := psSolid; Tablo.Canvas.Pen.Width := 2;
   Tablo.Canvas.Rectangle(configRU[config.ru].BoxLeft,configRU[config.ru].BoxTop,configRU[config.ru].BoxLeft+12*20+7,configRU[config.ru].BoxTop+16);
@@ -502,11 +555,11 @@ begin
     if Ikonki[i,1] > 0 then ImageList.Draw(Tablo.Canvas,Ikonki[i,2],Ikonki[i,3],Ikonki[i,1],true);
     inc(c); if c > 400 then begin SyncReady; c := 0; end;
   end;
-
+  }
   // Из за ошибки в драйвере видеоадаптера WinXP приходится проделывать следующие действия:
   Tablo.Canvas.Brush.Style := bsClear; Tablo.Canvas.Font.Color := clRed; Tablo.Canvas.Font.Color := clBlack;
   // конец программы, устраняющей ошибку WinXP
-
+  //ObjView[714].Title :='Н1';
   // прорисовка всех отображающих объектов табло
   for i := configRU[config.RU].OVmin to configRU[config.RU].OVmax do
   begin
@@ -516,6 +569,8 @@ begin
 
   for i := configRU[config.RU].OVmin to configRU[config.RU].OVmax do
   begin
+     if i = 1395 then
+    tst := 0;
     if (ObjView[i].TypeObj > 0) and (ObjView[i].Layer = 1) then DisplayItemTablo(@ObjView[i], Tablo.Canvas);
     inc(c);if c > 400 then begin SyncReady; WaitForSingleObject(hWaitKanal,3); c := 0; end;
   end;
@@ -699,10 +754,12 @@ begin
   begin
   // нажата левая кнопка мышки
     if ID_menu < 1 then
-    begin // проверить не нажат ли ярлык
-      Plakat(X,Y);
-    end else
-    if CreateDspMenu(ID_menu,0,0) then UpdateKeyList(ID_ViewObj);
+      begin // проверить не нажат ли ярлык
+        Plakat(X,Y);
+      end
+      else
+      if CreateDspMenu(ID_menu,0,0)
+        then UpdateKeyList(ID_ViewObj);
   end;
 end;
 
@@ -826,7 +883,8 @@ end;
 
 procedure TTabloMain.pmmSoobClick(Sender: TObject);
 begin
-  MsgFormDlg.Show;
+//$$
+MsgFormDlg.Show;
 end;
 
 procedure TTabloMain.pmmRU1Click(Sender: TObject);
@@ -887,7 +945,17 @@ begin
         begin
           MsgFormDlg.BtnUpdate.Enabled := false;
           UpdateMsgQuery := false;
-          st := 1; i := 0; while st <= Length(ListMessages) do begin if ListMessages[st] = #10 then inc(i); if i < 700 then inc(st) else begin SetLength(ListMessages,st); break; end; end; MsgFormDlg.Memo.Lines.Text := ListMessages;
+          st := 1; i := 0;
+          while st <= Length(ListMessages)do
+          begin
+            if ListMessages[st] = #10 then inc(i);
+            if i < 700 then inc(st)
+            else
+              begin
+                SetLength(ListMessages,st); break;
+              end;
+            end;
+            MsgFormDlg.Memo.Lines.Text := ListMessages;
           st := 1; i := 0; while st <= Length(ListNeisprav) do begin if ListNeisprav[st] = #10 then inc(i); if i < 700 then inc(st) else begin SetLength(ListNeisprav,st); break; end; end; MsgFormDlg.MemoNeispr.Lines.Text := ListNeisprav;
           st := 1; i := 0; while st <= Length(ListDiagnoz) do begin if ListDiagnoz[st] = #10 then inc(i); if i < 700 then inc(st) else begin SetLength(ListDiagnoz,st); break; end; end; MsgFormDlg.MemoUVK.Lines.Text := ListDiagnoz;
         end;
@@ -1075,28 +1143,28 @@ end;
 // Открыть список объектов зависимотей
 procedure TTabloMain.pmmObjListClick(Sender: TObject);
 begin
-  ViewObjForm.Show;
+ViewObjForm.Show;
 end;
 
 //----------------------------------------------------------------------------
 // Открыть форму назначения регистрируемых событий
 procedure TTabloMain.pmNotifyClick(Sender: TObject);
 begin
-  NotifyForm.Show;
+ NotifyForm.Show;
 end;
 
 //----------------------------------------------------------------------------
 // Сохранить образ табло
 procedure TTabloMain.pmPhotoClick(Sender: TObject);
 begin
-  SaveTablo;
+SaveTablo;
 end;
 
 //----------------------------------------------------------------------------
 // Сохранить архив журнала
 procedure TTabloMain.pmArxivClick(Sender: TObject);
 begin
-  SaveArcToFloppy;
+SaveArcToFloppy;
 end;
 
 //----------------------------------------------------------------------------
@@ -1106,5 +1174,97 @@ begin
   SyncDCReady
 end;
 
+procedure TTabloMain.TimerGoraTimer(Sender: TObject);
+var
+  i,j : integer;
+  CRC16 : crc16_t;
+  label  repit;
+begin
+  if (KanalSrv[1].active = false) and (KanalSrv[2].active = false) then
+  for i := 300 to 700 do
+  begin
+    FR3[i] := $20;
+    FR4[i] := 0;
+  end
+  else
+  begin
+    Zagol[1] := $AA;
+    Zagol[2] := $15;
+    Zagol[3] := $1;
+    Zagol[4] := $0;
+    for i := 1 to 70 do Bufer_Out[i] := 0;
+    for i := 1 to 4 do Bufer_Out[i] := Zagol[i];
+    j := i;
+    for i := 1 to 20 do //пройти по списку новизны
+    begin
+      if NEW_FR3[i]<>0 then //если есть новизна
+      begin
+        if OutGora[NEW_FR3[i]] <> $31 then  //если объект не из горочных
+          begin
+            NEW_FR3[i] := 0;  //сбросить ячейку с номером обновленного объекта
+            Continue;       // продолжить
+          end;
+        Bufer_Out[j] := NEW_FR3[i] and $ff; j := j+1; //перенести в буфер номер объекта
+        Bufer_Out[j] := (NEW_FR3[i] and $ff00) shr 8; j := j+1;
+        Bufer_Out[j] := FR3[NEW_FR3[i]]; j := j+1;  //перенести в буфер данные об объекте
+        NEW_FR3[i] := 0; //сбросить признак новизны
+      end
+      else continue;  //если ячейка пустая продолжить
+      if j>64 then break;  //если буфер вывода полон, прекратить
+    end;
+    if j<65 then //если в буфере вывода есть место для объектов
+    begin
+      for i := 0 to 20 do  //пройти по новизнам ограничений
+      begin
+        if NEW_FR4[i] > 0 then //если есть новизна ограничений
+        begin
+          if OutGora[NEW_FR4[i]] <> $31 then // если объект не из горочных
+          begin
+            NEW_FR4[i] := 0;   //освободить ячейку для номера с новизной
+            continue;       // продолжить
+          end;
+          Bufer_Out[j] := (NEW_FR4[i] and $ff) and $80; j := j+1; //записать номер объекта в буфер
+          Bufer_Out[j] := ((NEW_FR4[i] and $ff00) shr 8) or $80; j := j+1; //включить признак ограничения
+          Bufer_Out[j] := FR4[NEW_FR4[i] and $fff]; //записать код ограничения
+          NEW_FR4[i] := 0; //очистить ячейку списка ограничений
+        end
+        else continue; //если ячейка списка пустая - продолжить
+
+        if j>64 then break; //если в буфере места уже нет - прервать
+      end
+    end; //конец if 65
+
+    if j<65 then  //если в буфере вывода осталось место
+    begin
+ repit:
+      for i := last_fr3 to 1000 do // начать передачу по циклу
+      begin
+        if((i <> 989) and (i>699)) then continue
+        else
+          if i<>989 then
+            if OutGora[i] <> $31 then continue; //если не горочный объект - пропустить
+        Bufer_Out[j] := i and $ff; j := j+1;//заполнить номер объекта
+        Bufer_Out[j] := (i and $ff00) shr 8; j := j+1;
+        Bufer_Out[j] := FR3[i]; j := j+1;  //заполнить состояние объекта
+        if j>64 then break;          //если буфер полон - прекратить
+        if FR4[i] <> 0 then //если для объекта есть ограничение
+        begin
+          Bufer_Out[j] := i and $ff; j := j + 1; //заполнить номер объекта
+          Bufer_Out[j] := ((i and $ff00) shr 8) or $80; j := j + 1;//вывесить флаг ограничений
+          Bufer_Out[j] := FR4[i]; j := j + 1;//заполнить само ограничение
+        end;
+        if j>64 then break; //если буфер вывода полон - прервать
+      end;
+      if i<1000 then last_fr3 := i  //если не дошли до конца списка горочных - запомнить последний объект
+      else last_fr3 := 0; //если конец списка - начать сначала
+      if j<65 then goto repit; //если в буфере осталось место - повторить
+    end;
+    CRC16 := CalculateCRC16(@Bufer_Out[2],66);  //посчитать КС
+    Bufer_Out[68] := CRC16 and $ff;
+    Bufer_Out[69] := (CRC16 and $ff00) shr 8;
+    Bufer_Out[70] := $55;
+    WriteSoobGora;
+  end;
+end;
 end.
 

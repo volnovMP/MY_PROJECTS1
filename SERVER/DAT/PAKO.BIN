@@ -13,7 +13,7 @@ SP330
 ST328/330:330       
 DZ328PK             
 M316                
-UP322/330           
+UP302/330           
 M314                
 DZ304PK             
 ST302/304:302       
@@ -377,9 +377,7 @@ PNPG
 NP                  
 DZSNNP              
 UPNP                
-DZ1PK               
-ST1/3:3             
-SP3                 
+UP_M9P              
 M9                  
 SP5                 
 ST5/7:5             
@@ -685,13 +683,7 @@ DZ5PK
 ST5/7:7             
 SP7                 
 V19                 
-PM1                 
-M1                  
-SP1                 
-ST1/3:1             
-DZ3PK               
-M7                  
-PM7                 
+XXX                 
 P33                 
 ST31/33:33          
 DZ37-49SP+35/37MK   
@@ -849,10 +841,6 @@ AVSTR6
 AVSTR7              
 AVSTR8              
 BCHGP               
-BDOS                
-BINF                
-BKOKR               
-BKZK                
 C1KPS               
 C2KPS               
 CA6VK               
@@ -883,6 +871,7 @@ DCHSN_4
 DCHSN_5             
 DCHSN_6             
 DCHSN_7             
+DCHSN_8             
 DIR_1               
 DIR_2               
 DIR_3               
@@ -890,6 +879,7 @@ DIR_4
 DIR_5               
 DIR_6               
 DIR_7               
+DIR_8               
 DKPP                
 DKPP8               
 DMS_1               
@@ -899,6 +889,7 @@ DMS_4
 DMS_5               
 DMS_6               
 DMS_7               
+DMS_8               
 DMU_1               
 DMU_2               
 DMU_3               
@@ -906,6 +897,7 @@ DMU_4
 DMU_5               
 DMU_6               
 DMU_7               
+DMU_8               
 DN1S                
 DN2S                
 DNAPS               
@@ -917,6 +909,7 @@ DNSN_4
 DNSN_5              
 DNSN_6              
 DNSN_7              
+DNSN_8              
 DOTS1               
 DOTS2               
 DOTS3               
@@ -931,6 +924,7 @@ DOT_4
 DOT_5               
 DOT_6               
 DOT_7               
+DOT_8               
 DPS_1               
 DPS_2               
 DPS_3               
@@ -938,6 +932,7 @@ DPS_4
 DPS_5               
 DPS_6               
 DPS_7               
+DPS_8               
 DPU_1               
 DPU_2               
 DPU_3               
@@ -945,6 +940,7 @@ DPU_4
 DPU_5               
 DPU_6               
 DPU_7               
+DPU_8               
 DRZS1               
 DRZS2               
 DRZS3               
@@ -1008,12 +1004,11 @@ KS_4
 KS_5                
 KS_6                
 KS_7                
-KS_8_1              
-KS_8_2              
-KS_9_1              
-KS_9_2              
+KS_8                
+KS_9                
 KVDOS               
 KVINF               
+KVV                 
 KVV_1               
 KVV_2               
 KVV_3               
@@ -1021,10 +1016,8 @@ KVV_4
 KVV_5               
 KVV_6               
 KVV_7               
-KVV_8_1             
-KVV_8_2             
-KVV_9_1             
-KVV_9_2             
+KVV_8               
+KVV_9               
 LAVST               
 LBKO                
 LBKPS               
@@ -1072,12 +1065,17 @@ MI305
 MI307               
 MI309               
 MI339               
+MKS                 
+MKVV                
+MPAMX               
 MR301               
 MR303               
 MR305               
 MR307               
 MR309               
 MR339               
+MUS9                
+MYTHX               
 MYTHX_1             
 MYTHX_2             
 MYTHX_3             
@@ -1085,10 +1083,8 @@ MYTHX_4
 MYTHX_5             
 MYTHX_6             
 MYTHX_7             
-MYTHX_8_1           
-MYTHX_8_2           
-MYTHX_9_1           
-MYTHX_9_2           
+MYTHX_8             
+MYTHX_9             
 N1KPS               
 N2KPS               
 N3IP                
@@ -1126,6 +1122,7 @@ O1-9_4
 O1-9_5              
 O1-9_6              
 O1-9_7              
+O1-9_8              
 O17-18_1            
 O17-18_2            
 O17-18_3            
@@ -1133,6 +1130,7 @@ O17-18_4
 O17-18_5            
 O17-18_6            
 O17-18_7            
+O17-18_8            
 O19-20_1            
 O19-20_2            
 O19-20_3            
@@ -1140,6 +1138,7 @@ O19-20_4
 O19-20_5            
 O19-20_6            
 O19-20_7            
+O19-20_8            
 O1X_1_1             
 O1X_2_1             
 O1X_3_1             
@@ -1150,6 +1149,7 @@ O2-10_4
 O2-10_5             
 O2-10_6             
 O2-10_7             
+O2-10_8             
 O21-22_1            
 O21-22_2            
 O21-22_3            
@@ -1157,6 +1157,7 @@ O21-22_4
 O21-22_5            
 O21-22_6            
 O21-22_7            
+O21-22_8            
 O23-24_2            
 O3-11_1             
 O3-11_2             
@@ -1165,6 +1166,7 @@ O3-11_4
 O3-11_5             
 O3-11_6             
 O3-11_7             
+O3-11_8             
 O4-12_1             
 O4-12_2             
 O4-12_3             
@@ -1172,6 +1174,7 @@ O4-12_4
 O4-12_5             
 O4-12_6             
 O4-12_7             
+O4-12_8             
 O5-13_1             
 O5-13_2             
 O5-13_3             
@@ -1179,6 +1182,7 @@ O5-13_4
 O5-13_5             
 O5-13_6             
 O5-13_7             
+O5-13_8             
 O6-14_1             
 O6-14_2             
 O6-14_3             
@@ -1186,6 +1190,7 @@ O6-14_4
 O6-14_5             
 O6-14_6             
 O6-14_7             
+O6-14_8             
 O7-15_1             
 O7-15_2             
 O7-15_3             
@@ -1193,6 +1198,7 @@ O7-15_4
 O7-15_5             
 O7-15_6             
 O7-15_7             
+O7-15_8             
 O8-16_1             
 O8-16_2             
 O8-16_3             
@@ -1200,6 +1206,7 @@ O8-16_4
 O8-16_5             
 O8-16_6             
 O8-16_7             
+O8-16_8             
 OBDUV               
 OG10A               
 OG10G               
@@ -1233,17 +1240,11 @@ OG8G
 OG9A                
 OG9G                
 OMG                 
+PAMX                
 PAMX_1              
 PAMX_2              
-PAMX_3              
-PAMX_4              
-PAMX_5              
-PAMX_6              
-PAMX_7              
 PAMX_8_1            
 PAMX_8_2            
-PAMX_9_1            
-PAMX_9_2            
 PER33               
 PFID                
 PITAN               
@@ -1268,11 +1269,8 @@ RAZN5
 RAZN8               
 RDCH                
 RDIR                
-RDOS                
 REKAN               
 REZ1                
-RINF                
-RKAN                
 RM303               
 RM305               
 RM307               
@@ -1283,8 +1281,6 @@ ROK
 RRM3                
 RRM5                
 RSV                 
-RVDOS               
-RVINF               
 RZAM                
 RZS1                
 RZS2                
@@ -1408,7 +1404,6 @@ SP357RI
 SP36RI              
 SP37RI              
 SP39RI              
-SP3RI               
 SP41RI              
 SP45RI              
 SP47RI              
@@ -1455,8 +1450,8 @@ UP1CG
 UP1CGRI             
 UP2/12RI            
 UP2CGPRI            
+UP302RI             
 UP317RI             
-UP322RI             
 UP39RI              
 UP45RI              
 UP531RI             
@@ -1472,6 +1467,7 @@ UPNA1RI
 UPNDPRI             
 UPNM1RI             
 UPNPRI              
+UP_M9PRI            
 US_1                
 US_2                
 US_3                
@@ -1479,10 +1475,8 @@ US_4
 US_5                
 US_6                
 US_7                
-US_8_1              
-US_8_2              
-US_9_1              
-US_9_2              
+US_8                
+US_9                
 UZP                 
 UZP1                
 UZP1D               
@@ -1493,9 +1487,7 @@ UZP4D
 UZPD                
 VCH1S               
 VCH2S               
-VDOS                
 VG                  
-VINF                
 VM1                 
 VM2                 
 VM3                 
@@ -1504,6 +1496,12 @@ VM5
 VM6                 
 VN1S                
 VN2S                
+VPS1                
+VPS2                
+VPS4                
+VPS5                
+VPS6                
+VPS7                
 VPSO                
 VUP                 
 VUS1                

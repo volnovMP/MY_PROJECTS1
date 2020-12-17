@@ -28,7 +28,6 @@ type
 var
   TimeInputDlg: TTimeInputDlg;
   TimeInputPos : TPoint;
-  NewTime : Double;
 
 implementation
 
@@ -57,57 +56,57 @@ begin
     time64 := (time64 + uts.wMinute) shl 8;
     time64 := time64 + uts.wSecond;
 
-    if WorkMode.ServerSync then // Установить новое время через сервер
+    if WorkMode.ServerSync then
+    begin // Установить новое время через сервер
       SendDoubleToSrv(time64,cmdfr3_newdatetime,DateTimeSync);
+    end else
+    begin // Установить новое время только у себя
+      err := false;
+      Sc := time64 and $00000000000000ff;
+      time64 := time64 shr 8;
+      Mn := time64 and $00000000000000ff;
+      time64 := time64 shr 8;
+      Hr := time64 and $00000000000000ff;
+      time64 := time64 shr 8;
+      Dy := time64 and $00000000000000ff;
+      time64 := time64 shr 8;
+      Mt := time64 and $00000000000000ff;
+      time64 := time64 shr 8;
+      Yr := (time64 and $00000000000000ff) + 2000;
 
-    err := false;
-    Sc := time64 and $00000000000000ff;
-    time64 := time64 shr 8;
-    Mn := time64 and $00000000000000ff;
-    time64 := time64 shr 8;
-    Hr := time64 and $00000000000000ff;
-    time64 := time64 shr 8;
-    Dy := time64 and $00000000000000ff;
-    time64 := time64 shr 8;
-    Mt := time64 and $00000000000000ff;
-    time64 := time64 shr 8;
-    Yr := (time64 and $00000000000000ff) + 2000;
+      if not TryEncodeTime(Hr,Mn,Sc,0,nt) then
+      begin
+        err := true;
+        AddFixMessage('Сбой службы времени. Попытка установки времени '+ IntToStr(Hr)+':'+ IntToStr(Mn)+':'+ IntToStr(Sc),4,1);
+      end;
+      if not TryEncodeDate(Yr,Mt,Dy,nd) then
+      begin
+        err := true;
+        AddFixMessage('Сбой службы времени. Попытка установки даты '+ IntToStr(Yr)+'-'+ IntToStr(Mt)+'-'+ IntToStr(Dy),4,1);
+      end;
+      if not err then
+      begin
+        ndt := nd+nt;
+        DateTimeToSystemTime(ndt,uts);
+        SystemTimeToTzSpecificLocalTime(nil,uts,lt);
+        cdt := SystemTimeToDateTime(lt) - ndt;
+        ndt := ndt - cdt;
 
-    if not TryEncodeTime(Hr,Mn,Sc,0,nt) then
-    begin
-      err := true;
-      AddFixMessage('Сбой службы времени. Попытка установки времени '+ IntToStr(Hr)+':'+ IntToStr(Mn)+':'+ IntToStr(Sc),4,1);
-    end;
-    if not TryEncodeDate(Yr,Mt,Dy,nd) then
-    begin
-      err := true;
-      AddFixMessage('Сбой службы времени. Попытка установки даты '+ IntToStr(Yr)+'-'+ IntToStr(Mt)+'-'+ IntToStr(Dy),4,1);
-    end;
-    if not err then
-    begin
-      ndt := nd+nt;
-      NewTime := ndt;
-      DateTimeToSystemTime(ndt,uts);
-      SystemTimeToTzSpecificLocalTime(nil,uts,lt);
-      cdt := SystemTimeToDateTime(lt) - ndt;
-      ndt := ndt - cdt;
-      if not WorkMode.ServerSync then
-      begin // установить время у себя
         DateTimeToSystemTime(ndt,uts);
         SetSystemTime(uts);
         delta := ndt - LastTime;
-        for i := 1 to sizeof(FR3s) do // коррекция отметок времени в FR3
-          if FR3s[i] > 0.00000001 then FR3s[i] := FR3s[i] - delta;
-        for i := 1 to sizeof(FR4s) do // коррекция отметок времени в FR4
-          if FR4s[i] > 0.00000001 then FR4s[i] := FR4s[i] - delta;
+        for i := 1 to High(FR3s) do // коррекция отметок времени в FR3
+          if FR3s[i] > 0.00000001 then FR3s[i] := FR3s[i] + delta;
+        for i := 1 to High(FR4s) do // коррекция отметок времени в FR4
+          if FR4s[i] > 0.00000001 then FR4s[i] := FR4s[i] + delta;
 
-        for i := 1 to sizeof(ObjZav) do
+        for i := 1 to High(ObjZav) do
         begin // коррекция отметок времени в объектах зависимостей
-          if ObjZav[i].Timers[1].Active then ObjZav[i].Timers[1].First := ObjZav[i].Timers[1].First - delta;
-          if ObjZav[i].Timers[2].Active then ObjZav[i].Timers[2].First := ObjZav[i].Timers[2].First - delta;
-          if ObjZav[i].Timers[3].Active then ObjZav[i].Timers[3].First := ObjZav[i].Timers[3].First - delta;
-          if ObjZav[i].Timers[4].Active then ObjZav[i].Timers[4].First := ObjZav[i].Timers[4].First - delta;
-          if ObjZav[i].Timers[5].Active then ObjZav[i].Timers[5].First := ObjZav[i].Timers[5].First - delta;
+          if ObjZav[i].Timers[1].Active then ObjZav[i].Timers[1].First := ObjZav[i].Timers[1].First + delta;
+          if ObjZav[i].Timers[2].Active then ObjZav[i].Timers[2].First := ObjZav[i].Timers[2].First + delta;
+          if ObjZav[i].Timers[3].Active then ObjZav[i].Timers[3].First := ObjZav[i].Timers[3].First + delta;
+          if ObjZav[i].Timers[4].Active then ObjZav[i].Timers[4].First := ObjZav[i].Timers[4].First + delta;
+          if ObjZav[i].Timers[5].Active then ObjZav[i].Timers[5].First := ObjZav[i].Timers[5].First + delta;
         end;
         LastSync := ndt;
         LastTime := ndt;

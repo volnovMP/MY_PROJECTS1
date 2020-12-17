@@ -4,9 +4,9 @@ unit Commons;
 //                общеупотребимые процедуры и константы
 //
 //  версия                    - 1
-//  редакция                  - 5
+//  редакция                  - 3
 //
-//  дата последнего изменения - 14 июля 2006г.
+//  дата последнего изменения - 05 января 2006г.
 //------------------------------------------------------------------------------
 
 {$INCLUDE CfgProject}
@@ -14,7 +14,7 @@ unit Commons;
 interface
 
 uses
-  Windows, Forms, SysUtils, Graphics,
+  Windows, SysUtils, Graphics,
   TabloForm;
 
 {$IFDEF RMARC}
@@ -93,10 +93,8 @@ procedure SetParamTablo;
 begin
 {$IFDEF RMDSP}
   shiftscr := 0;
-  isChengeRegion := true;
   TabloMain.Height := configRU[config.ru].TabloSize.Y;
   TabloMain.Width  := configRU[config.ru].TabloSize.X;
-  isChengeRegion := false;
   Tablo1.Height  := configRU[config.ru].TabloSize.Y-15;
   Tablo1.Width   := configRU[config.ru].TabloSize.X;
   Tablo2.Height  := configRU[config.ru].TabloSize.Y-15;
@@ -176,79 +174,66 @@ procedure InsArcNewMsg(Obj,Msg : SmallInt);
 begin
 // Дополнить буфер сообщений
 {$IFNDEF RMARC}
-  bh := (Obj and $ff00) shr 8;
-  bl := (Obj and $ff);
-  NewMsg := NewMsg + chr(bl) + chr(bh);
+  bh := Obj div $100; bl := Obj - (bh * $100); NewMsg := NewMsg + chr(bl) + chr(bh);
   bh := Msg div $100; bl := Msg - (bh * $100); NewMsg := NewMsg + chr(bl) + chr(bh);
-  if Msg = $3001 then //if 0
+  if Msg = $3001 then
   begin
-    s := 'Зафиксирована неисправность входного интерфейса '+ IntToStr(Obj); DateTimeToString(t,'dd-mm-yy hh:nn:ss', LastTime); s := t + ' > '+ s;
-  end
-  else //if 0
-    if Msg = $3002 then //if 1
-    begin
-      s := 'Зафиксировано восстановление входного интерфейса '+ IntToStr(Obj);
-      DateTimeToString(t,'dd-mm-yy hh:nn:ss', LastTime);
-      s := t + ' > '+ s;
-    end  //  if 1
-    else //if 1
-      if (Msg >= $3003) and (Msg <= $3007) then // Сообщения диагностики УВК не дублировать (выводятся в процедуре обработки состояний)
-      begin  //if 2
-        exit;
-      end
-      else //if 2
-        // поместить сообщение в буфер неисправностей и предупреждений
-        if Msg >= 0 then  //if 3
-        begin  // if 3
-          k := Msg and $0c00;
-          m := Msg and $03ff;
-          case k of   // case $400
-            $400 :
-            begin // LEX2  case 0
-              if (Obj < 2000) and (Obj > 0) then
-                if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then s := MsgList[m]
-                else s := GetShortMsg(2,m,ObjZav[Obj].Liter);
-            end;    // case $400
-            $800 :
-            begin // LEX3  case $800
-              if (Obj < 2000) and (Obj > 0) then
-              if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then s := MsgList[m]
-              else s := GetShortMsg(3,m,ObjZav[Obj].Liter);
-            end; // case $800
-          else // LEX  case all
-            if (Obj < 2000) and (Obj > 0) then
-            if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then s := MsgList[m]
-            else s := GetShortMsg(1,m,ObjZav[Obj].Liter);
-          end; // case
-        end; //if 3 , if 2 , if 1, if 0
-  DateTimeToString(t,'dd-mm-yy hh:nn:ss', LastTime);
-  s := t + ' > '+ s;
+    s := 'Зафиксирована неисправность входного интерфейса '+ IntToStr(Obj);
+    DateTimeToString(t,'dd-mm-yy hh:nn:ss', LastTime);
+    s := t + ' > '+ s;
+  end else
+  if Msg = $3002 then
+  begin
+    s := 'Зафиксировано восстановление входного интерфейса '+ IntToStr(Obj);
+    DateTimeToString(t,'dd-mm-yy hh:nn:ss', LastTime);
+    s := t + ' > '+ s;
+  end else
+  if (Msg >= $3003) and (Msg <= $3006) then // Сообщения диагностики УВК не дублировать (выводятся в процедуре обработки состояний)
+  begin
+    exit;
+  end else
+  // поместить сообщение в буфер неисправностей и предупреждений
+  if Msg >= $1000 then
+  begin
+    k := Msg and $0c00; m := Msg and $03ff;
+    case k of
+      $400 : begin // LEX2
+        if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then
+        begin
+          s := MsgList[m];
+        end else
+          s := GetShortMsg(2,m,ObjZav[Obj].Liter);
+      end;
+      $800 : begin // LEX3
+        if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then
+        begin
+          s := MsgList[m];
+        end else
+          s := GetShortMsg(3,m,ObjZav[Obj].Liter);
+      end;
+    else // LEX
+        if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then
+        begin
+          s := MsgList[m];
+        end else
+          s := GetShortMsg(1,m,ObjZav[Obj].Liter);
+    end;
+    DateTimeToString(t,'dd-mm-yy hh:nn:ss', LastTime);
+    s := t + ' > '+ s;
+  end;
   if s <> '' then
   begin
-    if (Msg < $3000) or (Msg >= $4000) then
+    if Msg < $3000 then
     begin // предупреждения и сообщения о неисправностях устройств
-      ListMessages := s + #13#10 + ListMessages;
-      newListMessages := true;
-      if Length(ListMessages) > 200000 then
+      ListNeisprav := s + #13#10 + ListNeisprav;
+      if Length(ListNeisprav) > 200000 then
       begin // отрезать хвост если строка длиннее допустимого
-        k := 199000;
-        SetLength(ListMessages,k);
-        while (k > 0) and (ListMessages[k] <> #10) do dec(k);
-        SetLength(ListMessages,k);
+        k := 199000; SetLength(ListNeisprav,k);
+        while (k > 0) and (ListNeisprav[k] <> #10) do dec(k); SetLength(ListNeisprav,k);
       end;
-      if (Msg > $1000) and (Msg < $2000) then
-      begin // поместить в список неисправностей устройств
-        ListNeisprav := s + #13#10 + ListNeisprav; newListNeisprav := true;
-        if Length(ListNeisprav) > 200000 then
-        begin // отрезать хвост если строка длиннее допустимого
-          k := 199000; SetLength(ListNeisprav,k);
-          while (k > 0) and (ListNeisprav[k] <> #10) do dec(k); SetLength(ListNeisprav,k);
-        end;
-      end;
-    end
-    else
+    end else
     begin // диагностические сообщения УВК
-      ListDiagnoz := s + #13#10 + ListDiagnoz; newListDiagnoz := true;
+      ListDiagnoz := s + #13#10 + ListDiagnoz;
       SingleBeep4 := true;
       if Length(ListDiagnoz) > 200000 then
       begin // отрезать хвост если строка длиннее допустимого
@@ -256,12 +241,7 @@ begin
         while (k > 0) and (ListDiagnoz[k] <> #10) do dec(k); SetLength(ListDiagnoz,k);
       end;
     end;
-  NewNeisprav := true; // Зафиксирована новая неисправность, предупреждение
-{$ENDIF}
-{$IFDEF ARMSN}
-  rifreshMsg := false; // Требование обновить списки сообщений
-{$ENDIF}
-{$IFNDEF RMARC}
+    NewNeisprav := true; // Зафиксирована новая неисправность, предупреждение
   end;
 {$ENDIF}
 end;
@@ -296,7 +276,7 @@ begin
   begin // отрезать хвост если строка длиннее допустимого
     k := 199000; SetLength(ListNeisprav,k); while (k > 0) and (ListNeisprav[k] <> #10) do dec(k); SetLength(ListNeisprav,k);
   end;
-  if (Msg >= 0) and (Msg < $3000) then
+  if (Msg >= $1000) and (Msg < $3000) then
   begin
     k := Msg and $0c00;
     m := Msg and $03ff;
@@ -324,25 +304,7 @@ begin
     end;
   end else
   if Msg < $1000 then
-  begin // LEX - сообщения о состоянии устройств
-    m := Msg and $03ff;
-    if (Obj > 0) and (Obj < 4096) then
-    begin
-      if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then s := MsgList[m] else s := GetShortMsg(1,m,ObjZav[Obj].Liter);
-    end else
-      s := GetShortMsg(1,m,'');
-  end else
-  if (Msg >= $4000) and (Msg < $5000) then
-  begin // LEX - диалог с оператором, меню, запросы, подтверждение команд
-    m := Msg and $03ff;
-    if (Obj > 0) and (Obj < 4096) then
-    begin
-      if (ObjZav[Obj].TypeObj = 33) or (ObjZav[Obj].TypeObj = 36) then s := MsgList[m] else s := GetShortMsg(1,m,ObjZav[Obj].Liter);
-    end else
-      s := GetShortMsg(1,m,'');
-  end;
-  if (Msg >= $5000) and (Msg < $6000) then
-  begin // LEX - диалог с оператором, предупреждения при формировании команд
+  begin // LEX
     m := Msg and $03ff;
     if (Obj > 0) and (Obj < 4096) then
     begin
@@ -356,15 +318,15 @@ begin
     begin
       DateTimeToString(t,'dd-mm-yy hh:nn:ss', DTFrameOffset);
       s := t + ' > '+ s;
-      if (Msg < $3000) or (Msg >= $4000) then
-      begin // предупреждения и сообщения о неисправностях устройств, меню, запросы
+      if Msg < $3000 then
+      begin // предупреждения и сообщения о неисправностях устройств
         ListNeisprav := s + #13#10 + ListNeisprav;
         if (Msg > $1000) and (Msg < $2000) then SndNewWar := true;
       end else
       begin // диагностические сообщения УВК
         ListDiagnoz := s + #13#10 + ListDiagnoz; SndNewUvk := true;
       end;
-      NewNeisprav := true; // Зафиксирована новая неисправность, предупреждение, запрос
+      NewNeisprav := true; // Зафиксирована новая неисправность, предупреждение
     end;
   end;
 end;

@@ -331,7 +331,7 @@ begin
     if Len > 0 then
     begin
       // Записать в буфер порта (lps.cbOutQue = количество символов в буфере)
-      if not WriteFile( PortHandle, Buf[0], Len, lpNBWri, @TrmOLS) then
+      if not WriteFile( PortHandle, Buf, Len, lpNBWri, @TrmOLS) then
       begin
         if GetLastError <> ERROR_IO_PENDING then
         begin  // Ошибка не является флагом отложенной передачи
@@ -391,7 +391,6 @@ end; // TComport.StrToComm
 function TComPort.BufFromComm(Buf: pchar; MaxLen : Integer) : cardinal;
   var j : integer; lpe : DWORD; lps : COMSTAT; lpNBRd : Cardinal;
 begin
-  lpNBRd := 0;
   Result := 0;
   // Заполнить структуры состояния порта
   if ClearCommError(PortHandle, lpe, @lps) then
@@ -402,7 +401,7 @@ begin
     if j > 0 then
     begin
       // Прочитать буфер порта (j = количество символов в буфере)
-      if not ReadFile( PortHandle, Buf[0], j, lpNBRd, @RcvOLS) then
+      if not ReadFile( PortHandle, Buf, j, lpNBRd, @RcvOLS) then
       begin // Завершение с ошибкой
         if GetLastError <> ERROR_IO_PENDING then
         begin  // Ошибка не является флагом отложенной передачи
@@ -699,9 +698,7 @@ begin
       GetValueNames( Val );
       for i := 0 to Val.Count - 1 do
       begin
-        if (Val.Strings[i] = 'ProductName') and
-        ((ReadString(Val.Strings[i]) = 'Microsoft Windows 2000') or
-        (ReadString(Val.Strings[i]) = 'Windows Vista (TM) Home Premium')) then
+        if (Val.Strings[i] = 'ProductName') and (ReadString(Val.Strings[i]) = 'Microsoft Windows 2000') then
         begin
           // Windows 2k
           CloseKey;

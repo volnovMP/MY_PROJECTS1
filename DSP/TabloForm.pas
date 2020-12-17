@@ -8,7 +8,7 @@ unit TabloForm;
 //
 // Версия      1
 // Редакция    5
-// Дата        07 сентября 2006 года
+// Дата        16 января 2006 года
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,7 +29,6 @@ type
     ImageListIcon: TImageList;
     ASU: TTimer;
     ilGlobus: TImageList;
-    ilClock: TImageList;
     procedure FormCreate(Sender: TObject);
     procedure FormPaint(Sender: TObject);
     procedure FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -82,10 +81,8 @@ procedure PresetObjParams;
 procedure IncrementKOK;
 
 const
-  CurTablo1    = 1;
-  CurTablo1ok  = 2;
-  CurTabloGlas = 3;
-  MigInterval : double = 0.5;
+  CurTablo1   = 1;
+  CurTablo1ok = 2;
 
   ReportFileName = 'Dsp.rpt';
   KeyName : string = '\Software\DSPRPCTUMS';
@@ -93,9 +90,6 @@ const
 implementation
 
 uses
-  aclapi,
-  accctrl,
-
   TypeRpc,
   VarStruct,
   crccalc,
@@ -117,30 +111,11 @@ uses
 
 {$R *.DFM}
 
+//var
+//  MaxLastCRC : integer;
+
 var
   sMsg,sPar : string; // строковые переменные для всех спроцедур формы
-  dMigTablo : Double; // переменная для формирования интервала мигающей индикации табло
-
-  CntSyncCh : integer;
-  CntSyncTO : integer;
-
-  fix : integer;
-
-function SetPrivilege(aPrivilegeName : string; aEnabled : boolean ): boolean;
-var
-  TPPrev, TP : TTokenPrivileges; Token : THandle; dwRetLen : DWord;
-begin
-  Result := False;
-  OpenProcessToken(GetCurrentProcess,TOKEN_ADJUST_PRIVILEGES or TOKEN_QUERY, Token );
-  TP.PrivilegeCount := 1;
-  if( LookupPrivilegeValue(nil, PChar( aPrivilegeName ), TP.Privileges[ 0 ].LUID ) ) then
-  begin
-    if( aEnabled )then TP.Privileges[0].Attributes:= SE_PRIVILEGE_ENABLED else TP.Privileges[0].Attributes:= 0;
-    dwRetLen := 0;
-    Result := AdjustTokenPrivileges(Token,False,TP, SizeOf( TPPrev ), TPPrev,dwRetLen );
-  end;
-  CloseHandle( Token );
-end; 
 
 procedure TTabloMain.FormDestroy(Sender: TObject);
 begin
@@ -155,12 +130,7 @@ begin
   if hDspToArcPipe <> INVALID_HANDLE_VALUE then CloseHandle(hDspToArcPipe);
   if hWaitKanal <> INVALID_HANDLE_VALUE then CloseHandle(hWaitKanal);
 
-  if LoopHandle > 0 then begin LoopSync := false; CloseHandle(LoopHandle); end;
   DateTimeToString(sMsg, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
-  FixStatKanal(1);
-  FixStatKanal(2);
-  reportf('Синхронизаций по каналу   = '+ IntToStr(CntSyncCh));
-  reportf('Синхронизаций по таймауту = '+ IntToStr(CntSyncTO));
   reportf('Завершение работы программы '+ sMsg);
   if Assigned(MsgFormDlg) then MsgFormDlg.Free;
   if Assigned(TimeInputDlg) then TimeInputDlg.Free;
@@ -171,23 +141,11 @@ begin
   if Assigned(Tablo2) then Tablo2.Free;
   if Assigned(ObjectWav) then ObjectWav.Free;
   if Assigned(IpWav) then IpWav.Free;
-{$IFNDEF DEBUG}
-  if ReBoot then
-  begin
-    if SetPrivilege('SeShutdownPrivilege', true) then
-    begin
-      if not ExitWindowsEx(EWX_FORCE or EWX_REBOOT, 0) then Beep;
-      SetPrivilege('SeShutdownPrivilege', False);
-    end;
-    MessageBeep(MB_ICONHAND);
-  end;
-{$ENDIF}
 end;
 
 procedure TTabloMain.FormCreate(Sender: TObject);
   var err: boolean; i,h : integer;
 begin
-  Caption := 'Табло';
   hDspToDspEventWrt := INVALID_HANDLE_VALUE;
   hDspToDspEventRd := INVALID_HANDLE_VALUE;
   DspToDspThread := INVALID_HANDLE_VALUE;
@@ -199,17 +157,21 @@ begin
   ASU.Interval := ASU_TIMER_INTERVAL;
   GlobusIndex := 0;
   ilGlobus.BkColor := armcolor15;
-  ilClock.BkColor := armcolor15;
-  LockTablo := false;
+  Caption := 'Табло';
   FormStyle := fsStayOnTop; // если нет отладки - установить окно поверх остальных
   IsCloseRMDSP := false; SendToSrvCloseRMDSP := false;
   reg := TRegistry.Create; // Объект для доступа к реестру
   reg.RootKey := HKEY_LOCAL_MACHINE;
-  // Проверить длину файла протокол ошибок работы
+  // Загрузить предыдущий протокол
   if FileExists(ReportFileName) then
   begin
     h := FileOpen(ReportFileName,fmOpenRead);
-    if h > 0 then begin i := FileSeek(h,0,2); if i > 199999 then FileSeek(h,0,0); FileClose(h); end;
+    if h > 0 then
+    begin
+      i := FileSeek(h,0,2);
+      if i > 99999 then DeleteFile(ReportFileName);
+      FileClose(h);
+    end;
   end;
   DateTimeToString(sMsg, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
   reportf('@');
@@ -237,8 +199,8 @@ begin
     KanalSrv[1].config := sMsg; KanalSrv[2].config := sMsg;
     if reg.ValueExists('namepipein')  then KanalSrv[1].nPipe := reg.ReadString('namepipein') else sMsg := '';
     if reg.ValueExists('namepipeout') then KanalSrv[2].nPipe := reg.ReadString('namepipeout') else sMsg := '';
-    if (KanalSrv[1].nPipe = '') and (KanalSrv[2].nPipe = '')  then KanalType := 0 else
-    if (KanalSrv[1].nPipe <> 'null') or (KanalSrv[2].nPipe <> 'null') then KanalType := 1 else
+    if (KanalSrv[1].nPipe = '') and (KanalSrv[2].nPipe = '') then KanalType := 0 else
+    if (KanalSrv[1].nPipe <> '') and (KanalSrv[2].nPipe <> '') then KanalType := 1 else
     begin err := true; reportf('Неверно определен тип канала связи с сервером'); end;
     if reg.ValueExists('configok') then ConfigPortOK := reg.ReadString('configok') else begin err := true; reportf('Нет ключа "configok"'); end;
     if reg.ValueExists('configok1') then ConfigPortOK1 := reg.ReadString('configok1') else begin err := true; reportf('Нет ключа "configok1"'); end;
@@ -370,7 +332,6 @@ begin
   if not LoadMsg(config.path + 'MSG.SDB') then err := true;
   // Загрузка структуры АКНР - выполняется после инициализации объектов зависимостей
   if not LoadAKNR(config.path + 'AKNR.SDB') then err := true;
-  GetMYTHX;
 
   // Установить начальные данные режима работы АРМа
   ResetTrace;
@@ -411,7 +372,6 @@ end;
 //------------------------------------------------------------------------------
 // Активизация табло
 procedure TTabloMain.FormActivate(Sender: TObject);
-  var Dummy : Cardinal;
 begin
   if not AppStart then exit;
   InsNewArmCmd($7ffb,0);
@@ -435,7 +395,7 @@ begin
     end else asTestMode := $55;
   end else asTestMode := $55;
 
-  if (ConfigPortOK <> '') and Assigned(PortOK) then
+  if (ConfigPortOK <> '') and (PortOK <> nil) then
   begin
     if not PortOK.OpenPort then
     begin
@@ -444,7 +404,7 @@ begin
     begin PortOK.DTROnOff(true); end;
   end;
 
-  if (ConfigPortOK1 <> '') and Assigned(PortOK1) then
+  if (ConfigPortOK1 <> '') and (PortOK1 <> nil) then
   begin
     if not PortOK1.OpenPort then
     begin
@@ -453,7 +413,7 @@ begin
     begin PortOK1.StrToComm('тест первичного порта КОК'); end;
   end;
 
-  if (ConfigPortOK2 <> '') and Assigned(PortOK2) then
+  if (ConfigPortOK2 <> '') and (PortOK2 <> nil) then
   begin
     if not PortOK2.OpenPort then
     begin
@@ -469,7 +429,7 @@ begin
     else
       DspToDspThread := CreateThread(nil,0,@DspToDspServerProc,DspToDspParam,0,DspToDspThreadID);     // сервер АСУ1
     end;
-    if DspToDspThread = 0 then
+    if DspToDspThread = INVALID_HANDLE_VALUE then
       reportf('Ошибка создания процесса обработки канала АСУ1.')
     else
       reportf('Начало обработки канала АСУ1.');
@@ -479,7 +439,7 @@ begin
   if DspToArcEnabled then
   begin // старт процесса обработки программного канала хранилища архива
     DspToArcThread := CreateThread(nil,0,@DspToARCProc,DspToArcParam,0,DspToArcThreadID); // клиент АСУ1
-    if DspToArcThread = 0 then
+    if DspToArcThread = INVALID_HANDLE_VALUE then
       reportf('Ошибка создания процесса обработки канала хранилища удаленного архива.')
     else
       reportf('Начало обработки канала хранилища удаленного архива.');
@@ -490,7 +450,6 @@ begin
 
   MainTimer.Enabled := true;
   LastRcv := Date+Time;
-  dMigTablo := Date+Time;
   if config.auto then SendCommandToSrv(WorkMode.DirectStateSoob,cmdfr3_directdef,0); // автозапрос захвата управления
   CmdSendT := Date + Time;   // начать отсчет времени жизни каманды автозахвата управления
   StartTime := CmdSendT;     // момент запуска РМ-ДСП
@@ -498,19 +457,9 @@ begin
   SendRestartServera := false;
   LockTablo := false;
   LockCommandDsp := false;
-  // создать поток обслуживания канала АРМ - Сервер и начать синхронизацию
-  LoopSync := true;
-  LoopHandle := CreateThread(nil,0,@SyncReadyThread,nil,0,Dummy); // начать обслуживание каналов
-  if LoopHandle > 0 then
-  begin
-    reportf('Поток обработки канала АРМ-Сервер запущен. ThreadID='+IntToStr(Dummy));
-    ConnectKanalSrv(1); ConnectKanalSrv(2);
-  end else
-  begin
-    reportf('Ошибка инициализации потока обработки канала АРМ-Сервер. Аварийное завершение работы программы.');
-    Application.Terminate;
-  end;
-  ReBoot := true;
+
+  ConnectKanalSrv(1);
+  ConnectKanalSrv(2);
 end;
 
 procedure TTabloMain.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -549,8 +498,6 @@ begin
       end;
     end;
 
-    MainLoopState := 1; // завершить обработку главного цикла
-    ReBoot := not CanClose;
     exit;
   end else
   if not SendToSrvCloseRMDSP then
@@ -558,11 +505,10 @@ begin
     ShowWindow(Application.Handle,SW_SHOW);
     if PasswordDlg.ShowModal = mrOk then
     begin
-      InsArcNewMsg(0,89); ShowShortMsg(89,LastX,LastY,'');
+      PutShortMsg(2,LastX,LastY,'Ожидается завершение работы РМ-ДСП');
       SendCommandToSrv(WorkMode.DirectStateSoob,cmdfr3_logoff,0);
       SendToSrvCloseRMDSP := true;
       KanalSrv[1].State := PIPE_EXIT; // Завершение приема из программного канала
-      KanalSrv[2].State := PIPE_EXIT; // Завершение приема из программного канала
       if DspToDspEnabled and (DspToDspThread <> INVALID_HANDLE_VALUE) then begin DspToDspBreak := true; ResumeThread(DspToDspThread); end;
       if DspToArcEnabled and (DspToArcThread <> INVALID_HANDLE_VALUE) then begin DspToArcBreak := true; ResumeThread(DspToArcThread); end;
 
@@ -584,7 +530,6 @@ end;
 procedure TTabloMain.FormPaint(Sender: TObject);
   var i,x,y : integer; p : TPoint; n : boolean;
 begin
-try
   n := false;
   for i := 1 to 20 do if stellaj[i] then begin n := true; break; end;
   if IkonkaMove or n then begin GetCursorPos(p); canvas.DrawFocusRect(rect(p.X+IkonkaDeltaX,p.Y+IkonkaDeltaY,p.X+12++IkonkaDeltaX,p.Y+12++IkonkaDeltaY)); end;
@@ -607,13 +552,7 @@ try
     end else
     if (ObjHintIndex > 0) and ((LastTime - LastMove) > (30/86400)) then
     begin
-      if tab_page then
-      begin
-        ResetShortMsg; ObjHintIndex := cur_obj;
-      end else
-      begin
-        i := LastX div configru[config.ru].MonSize.X + 1; shortmsg[i] := ObjUprav[cur_obj].Hint; shortmsgcolor[i] := bkgndcolor;
-      end;
+      ResetShortMsg; ObjHintIndex := 0;
     end;
   end;
 
@@ -631,16 +570,16 @@ try
       canvas.Brush.Color := clRed; canvas.FillRect(rect(i*X-31, Y-14, i*X-27, Y-1));
       canvas.Brush.Color := clGreen; canvas.FillRect(rect(i*X-26, Y-14, i*X-22, Y-1));
       canvas.Brush.Color := clBlue; canvas.FillRect(rect(i*X-21, Y-14, i*X-17, Y-1));
-      if (ObjHintIndex > 0) and ((LastTime - LastMove) < (30/86400)) then
+      if ObjHintIndex > 0 then
       begin
         ImageList16.Draw(canvas,i*X-16, Y-15,1);
       end else
       if ShowWarning then
       begin
-        if tab_page then ImageList16.Draw(canvas,i*X-16, Y-15,5) else ImageList16.Draw(canvas,i*X-16, Y-15,0);
+        if mem_page then ImageList16.Draw(canvas,i*X-16, Y-15,5) else ImageList16.Draw(canvas,i*X-16, Y-15,0);
       end else
       begin
-        ilGlobus.Draw(canvas, i*X-16, Y-15, GlobusIndex);
+        ilGlobus.Draw(canvas,i*X-16, Y-15,GlobusIndex div 8);
       end;
     end else
     begin
@@ -649,7 +588,7 @@ try
       canvas.Brush.Color := clRed; canvas.FillRect(rect(i*X-31, Y-14, i*X-27, Y-1));
       canvas.Brush.Color := clGreen; canvas.FillRect(rect(i*X-26, Y-14, i*X-22, Y-1));
       canvas.Brush.Color := clBlue; canvas.FillRect(rect(i*X-21, Y-14, i*X-17, Y-1));
-      ilGlobus.Draw(canvas, i*X-16, Y-15, GlobusIndex);
+      ilGlobus.Draw(canvas,i*X-16, Y-15,GlobusIndex div 8);
     end;
   end;
 
@@ -682,30 +621,18 @@ try
       FindCursor := false; FindCursorCnt := 0;
     end;
   end;
-except
-  reportf('Ошибка [TabloForm.FormPaint]'); Application.Terminate;
-end;
 end;
 
 procedure TTabloMain.DrawTablo(tablo: TBitmap);
   var i,x,y,c : integer;
 begin
-try
-  if not Assigned(tablo) then
-  begin
-    reportf('Не инициализирован указатель перед вызовом процедуры [DrawTablo]'); Application.Terminate; exit;
-  end;
-fix := 1;
   Tablo.Canvas.Lock;
-  with tablo.Canvas do
-  begin
-    Brush.Color := bkgndcolor; Brush.Style := bsSolid; FillRect(rect(0, 0, tablo.width, tablo.height));
-  end;
+  Tablo.Canvas.Brush.Color := bkgndcolor;
+  Tablo.canvas.FillRect(rect(0, 0, tablo.width, tablo.height));
 
   if FixMessage.Count > 0 then
   begin
   // Нарисовать фиксированные сообщения
-fix := 2;
     x := configRU[config.ru].MsgLeft; y := configRU[config.ru].MsgTop;
     c := FixMessage.Count - FixMessage.StartLine;
     Tablo.Canvas.Font.Size := 8;
@@ -713,6 +640,7 @@ fix := 2;
     for i := FixMessage.StartLine to FixMessage.StartLine + c do
     begin
       Tablo.Canvas.Font.Color := FixMessage.Color[i];
+      Tablo.Canvas.Brush.Style := bsSolid;
       if i = FixMessage.MarkerLine then
         Tablo.Canvas.Brush.Color := focuscolor
       else
@@ -723,8 +651,7 @@ fix := 2;
     end;
     if FixMessage.Count > 5 then
     begin // отобразить полосу прокрутки фиксированных сообщений
-fix := 3;
-      Tablo.Canvas.Brush.Color := bkgndcolor;
+      Tablo.Canvas.Brush.Color := bkgndcolor; Tablo.Canvas.Brush.Style := bsSolid;
       Tablo.Canvas.Rectangle(configRU[config.ru].MsgRight-10,configRU[config.ru].MsgTop,configRU[config.ru].MsgRight,configRU[config.ru].MsgBottom);
       Tablo.Canvas.Brush.Color := Tablo.Canvas.Pen.Color;
       if FixMessage.StartLine > 1 then
@@ -743,7 +670,6 @@ fix := 3;
   end;
 
   // прорисовка полки со значками
-fix := 4;
   Tablo.Canvas.Pen.Color := armcolor8; Tablo.Canvas.Brush.Color := armcolor18; Tablo.Canvas.Pen.Style := psSolid; Tablo.Canvas.Pen.Width := 2;
   Tablo.Canvas.Rectangle(configRU[config.ru].BoxLeft,configRU[config.ru].BoxTop,configRU[config.ru].BoxLeft+12*20+7,configRU[config.ru].BoxTop+16);
   for i := 0 to 19 do
@@ -761,7 +687,6 @@ fix := 4;
   end;
 
   // прорисовка иконок в поле
-fix := 5;
   case config.ru of
     1 : begin // RU1
       for i := 1 to High(Ikonki) do
@@ -778,35 +703,30 @@ fix := 5;
   end;
 
   // Из за ошибки в драйвере видеоадаптера WinXP приходится проделывать следующие действия:
-fix := 6;
   Tablo.Canvas.Brush.Style := bsClear; Tablo.Canvas.Font.Color := clRed; Tablo.Canvas.Font.Color := clBlack;
   // конец программы, устраняющей ошибку WinXP
 
   // прорисовка всех отображающих объектов табло
-fix := 7;
   c := 0;
   for i := configRU[config.RU].OVmin to configRU[config.RU].OVmax do
   begin
     if (ObjView[i].TypeObj > 0) and (ObjView[i].Layer = 0) then DisplayItemTablo(@ObjView[i], Tablo.Canvas);
-    inc(c); if c > 300 then begin {SyncReady;} WaitForSingleObject(hWaitKanal,ChTO); c := 0; end;
+    inc(c); if c > 300 then begin SyncReady; WaitForSingleObject(hWaitKanal,3); c := 0; end;
   end;
 
-fix := 8;
   for i := configRU[config.RU].OVmin to configRU[config.RU].OVmax do
   begin
     if (ObjView[i].TypeObj > 0) and (ObjView[i].Layer = 1) then DisplayItemTablo(@ObjView[i], Tablo.Canvas);
-    inc(c);if c > 300 then begin {SyncReady;} WaitForSingleObject(hWaitKanal,ChTO); c := 0; end;
+    inc(c);if c > 300 then begin SyncReady; WaitForSingleObject(hWaitKanal,3); c := 0; end;
   end;
 
-fix := 9;
   for i := configRU[config.RU].OVmin to configRU[config.RU].OVmax do
   begin
     if (ObjView[i].TypeObj > 0) and (ObjView[i].Layer = 2) then DisplayItemTablo(@ObjView[i], Tablo.Canvas);
-    inc(c);if c > 300 then begin {SyncReady;} WaitForSingleObject(hWaitKanal,ChTO); c := 0; end;
+    inc(c);if c > 300 then begin SyncReady; WaitForSingleObject(hWaitKanal,3); c := 0; end;
   end;
 
   // Прорисовка границ экранов
-fix := 10;
   with Tablo.Canvas do
   begin
     Pen.Color := clDkGray; Pen.Width := 1; Brush.Style := bsClear; Pen.Style := psSolid;
@@ -819,10 +739,14 @@ fix := 10;
     Pen.Color := clDkGray; Pen.Width := 1; MoveTo(0,Tablo.Height-1); LineTo(Tablo.Width,Tablo.Height-1);
   end;
 
+// вывод количества не переданых квитанций
+{
+canvas.TextOut(0,0,IntToStr(LastCRC[1]));
+if MaxLastCRC < LastCRC[1] then MaxLastCRC := LastCRC[1];
+canvas.TextOut(0,20,IntToStr(LastCRC[2]));
+}
+
   Tablo.Canvas.UnLock;
-except
-  reportf('Ошибка [TabloForm.DrawTablo] fix='+ IntToStr(fix)); Application.Terminate;
-end;
 end;
 
 procedure TTabloMain.FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -880,7 +804,6 @@ end;
 procedure TTabloMain.DspPopupHandler(Sender: TObject);
   var i : integer;
 begin
-try
   with Sender as TMenuItem do begin
     for i := 1 to Length(DspMenu.Items) do
       if DspMenu.Items[i].ID = Command then
@@ -890,9 +813,6 @@ try
         exit;
       end;
   end;
-except
-  reportf('Ошибка [TabloForm.TTabloMain.DspPopupHandler]'); Application.Terminate;
-end;
 end;
 
 procedure ResetCommands;
@@ -905,13 +825,13 @@ begin
   Workmode.VspStr := false; Workmode.InpOgr := false;
   if OtvCommand.Active then
   begin
-    InsNewArmCmd(0,0); OtvCommand.Active := false; InsArcNewMsg(0,156); showShortMsg(156,LastX,LastY,'');
+    InsNewArmCmd(0,0); OtvCommand.Active := false; showShortMsg(156,LastX,LastY,'');
   end else
   if VspPerevod.Active then
   begin
     InsNewArmCmd(0,0);
     VspPerevod.Cmd := 0; VspPerevod.Strelka := 0; VspPerevod.Reper := 0;
-    VspPerevod.Active := false; InsArcNewMsg(0,149); showShortMsg(149,LastX,LastY,'');
+    VspPerevod.Active := false; showShortMsg(149,LastX,LastY,'');
   end else
     ResetShortMsg; // Сбросить все короткие сообщения
 end;
@@ -921,7 +841,6 @@ end;
 procedure TTabloMain.SetPlakat(X,Y : integer);
   var i,j,dx : integer; uu : boolean;
 begin
-try
   if not SetIkonRezNonOK and not WorkMode.OtvKom and not WorkMode.Upravlenie then begin for i := 1 to High(Stellaj) do stellaj[i] := false; IkonkaMove := false; IkonkaMoved := false; IkonkaDown := 0; IkonkaDeltaX := 0; IkonkaDeltaY := 0; exit; end;
   uu := false;
   for j := 0 to 19 do
@@ -1015,15 +934,11 @@ try
     end;
     for i := 1 to High(Stellaj) do stellaj[i] := false; // сброс на полке
   end;
-except
-  reportf('Ошибка [TabloForm.TTabloMain.SetPlakat]'); Application.Terminate;
-end;
 end;
 
 procedure TTabloMain.GetPlakat(X,Y : integer);
   var i,j,dx : integer; uu : boolean;
 begin
-try
   if not SetIkonRezNonOK and not WorkMode.OtvKom and not WorkMode.Upravlenie then begin for i := 1 to High(Stellaj) do stellaj[i] := false; IkonkaMove := false; IkonkaMoved := false; IkonkaDown := 0; IkonkaDeltaX := 0; IkonkaDeltaY := 0; exit; end;
   uu := false;
   for j := 0 to 19 do
@@ -1060,15 +975,11 @@ try
       end;
     end;
   end;
-except
-  reportf('Ошибка [TabloForm.TTabloMain.GetPlakat]'); Application.Terminate;
-end;
 end;
 
 procedure TTabloMain.DrawPlakat(X,Y : integer);
   var i,j,dx : integer; uu : boolean;
 begin
-try
   if not SetIkonRezNonOK and not WorkMode.OtvKom and not WorkMode.Upravlenie then begin for i := 1 to High(Stellaj) do stellaj[i] := false; IkonkaMove := false; IkonkaMoved := false; IkonkaDown := 0; IkonkaDeltaX := 0; IkonkaDeltaY := 0; exit; end;
   uu := false;
   if ((X+12+IkonkaDeltaX) >= configRU[config.ru].BoxLeft) and ((Y+12+IkonkaDeltaY) >= configRU[config.ru].BoxTop) and
@@ -1107,15 +1018,11 @@ try
       end;
     end;
   end;
-except
-  reportf('Ошибка [TabloForm.TTabloMain.DrawPlakat]'); Application.Terminate;
-end;
 end;
 
 procedure ResetAllPlakat;
   var i : integer;
 begin
-try
   for i := 1 to High(Ikonki) do
   begin
     Ikonki[i,1] := 0; Ikonki[i,2] := 0; Ikonki[i,3] := 0;
@@ -1125,9 +1032,6 @@ try
     Ikonki2[i,1] := 0; Ikonki2[i,2] := 0; Ikonki2[i,3] := 0;
   end;
   IkonNew := true; IkonSend := true;
-except
-  reportf('Ошибка [TabloForm.ResetAllPlakat]'); Application.Terminate;
-end;
 end;
 
 //------------------------------------------------------------------------------
@@ -1136,7 +1040,6 @@ procedure TTabloMain.FormMouseDown(Sender: TObject; Button: TMouseButton; Shift:
 begin
   GetPlakat(X,Y); // получить параметры перемещаемого плаката (если есть)
   OperatorDirect := LastTime + 1/86400;
-  if MarhTracert[1].TraceRazdel then ResetTrace; // сбросить плохую трассу раздельного режима
 end;
 
 var LastID_Obj : integer;
@@ -1180,7 +1083,7 @@ begin
 
     if cur_obj < 0 then
     begin // проверить точку
-      if WorkMode.GoTracert then
+      if WorkMode.GoTracert {and not MarhTracert[1].Finish} then
       begin // проверить не выбраны ли остряки стрелки при трассировке
         n := -1;
         for i := configRU[config.ru].OVmin to configRU[config.ru].OVmax do
@@ -1257,20 +1160,10 @@ begin
     end;
   end else
   begin // нажата правая кнопка мышки
-    // найти иконку, установленную на табло и удалить
-    n := 1;
-    case config.ru of
-      1 : begin // RU1
-        for i := High(Ikonki) downto 1 do if (Ikonki[i,1] > 0) and (Ikonki[i,2] <= X) and (Ikonki[i,2]+12 >= X) and (Ikonki[i,3] <= Y) and (Ikonki[i,3]+12 >= Y) then begin Ikonki[i,1] := 0; n := 0; break; end; 
-      end;
-      2 : begin // RU2
-        for i := High(Ikonki2) downto 1 do if (Ikonki2[i,1] > 0) and (Ikonki2[i,2] <= X) and (Ikonki2[i,2]+12 >= X) and (Ikonki2[i,3] <= Y) and (Ikonki2[i,3]+12 >= Y) then begin Ikonki2[i,1] := 0; n := 0; break; end;
-      end;
-    end;
-    IkonkaMove := false; IkonkaMoved := false; IkonkaDown := 0; IkonkaDeltaX := 0; IkonkaDeltaY := 0; InsNewArmCmd(0,0); UnLockHint;
-    ResetCommands;
+    IkonkaMove := false; IkonkaMoved := false; IkonkaDown := 0; IkonkaDeltaX := 0; IkonkaDeltaY := 0; InsNewArmCmd(0,0); UnLockHint; ResetCommands;
     // Сбросить фиксируемое сообщение
-    if (n > 0) and (X+shiftscr > configRU[config.ru].MsgLeft) and (X+shiftscr < configRU[config.ru].MsgRight) and (Y > configRU[config.ru].MsgTop) and (Y < configRU[config.ru].MsgBottom) then
+    if (X+shiftscr > configRU[config.ru].MsgLeft) and (X+shiftscr < configRU[config.ru].MsgRight) and
+       (Y > configRU[config.ru].MsgTop) and (Y < configRU[config.ru].MsgBottom) then
     begin
       n := (Y - configRU[config.ru].MsgTop) div 16 + FixMessage.StartLine; // Номер выбраной строки
       if n <= FixMessage.Count then begin FixMessage.MarkerLine := n; ResetFixMessage; end else SingleBeep := true;
@@ -1327,8 +1220,7 @@ begin
       else
         sMsg := Char(Key);
       end;
-      InsNewArmCmd($7fe7,0);
-      ShowShortMsg(141,LastX,LastY,'<'+ sMsg+ '>');
+      PutShortMsg(1,LastX,LastY,'Внимание! Длительно нажата клавиша <'+ sMsg+ '>');
       Beep;
     end;
   end else
@@ -1349,21 +1241,30 @@ begin
   if PopupMenuCmd.PopupComponent <> nil then exit;
   case Key of
 
-
-    VK_INSERT :
-    begin // Просмотр списка значений FR3, FR4
-      if Shift = [ssShift,ssCtrl] then FrForm.Show;
+{$IFDEF SAVEKANAL}
+    VK_F8 : begin
+      sl := TStringList.Create;
+      sl.Text := trmkvit;
+      sl.SaveToFile('trm.txt');
+      sl.Text := rcvkvit;
+      sl.SaveToFile('rsv.txt');
+      trmkvit := '';
+      rcvkvit := '';
+      sl.Free;
     end;
+{$ENDIF}
 
     VK_DELETE :
     begin
       if Shift = [ssShift] then
       begin // сброс информационных тпбличек (всех)
-        ResetAllPlakat; ShowShortMsg(142,LastX,LastY,'');
+        ResetAllPlakat;
+        PutShortMsg(2,LastX,LastY,'Информационные таблички сброшены');
       end else
       if Shift = [] then
       begin // сброс трассы маршрута
-        InsNewArmCmd(0,KeyMenu_ClearTrace); Cmd_ChangeMode(KeyMenu_ClearTrace);
+        InsNewArmCmd(0,KeyMenu_ClearTrace);
+        Cmd_ChangeMode(KeyMenu_ClearTrace);
       end;
     end;
 
@@ -1491,11 +1392,15 @@ begin
       begin
         if Shift = [] then
         begin // Конец набора маршрута
-          DspMenu.obj := 0; CreateDSPMenu(KeyMenu_EndTrace,LastX,LastY); SelectCommand;
+          DspMenu.obj := 0;
+          CreateDSPMenu(KeyMenu_EndTrace,LastX,LastY);
+          SelectCommand;
         end else
         if Shift = [ssShift] then
         begin // Сброс набора
-          DspMenu.obj := 0; CreateDSPMenu(KeyMenu_ClearTrace,LastX,LastY); SelectCommand;
+          DspMenu.obj := 0;
+          CreateDSPMenu(KeyMenu_ClearTrace,LastX,LastY);
+          SelectCommand;
         end;
       end;
     end;
@@ -1510,11 +1415,13 @@ begin
           begin
             if WorkMode.MarhUpr and (ObjUprav[i].MenuID = KeyMenu_MarshRejim) then
             begin
-              SetCursorPos(ObjUPrav[i].Box.Right-shiftscr-60, ObjUPrav[i].Box.Bottom-8); break;
+              SetCursorPos(ObjUPrav[i].Box.Right-shiftscr-60, ObjUPrav[i].Box.Bottom-8);
+              break;
             end else
             if WorkMode.RazdUpr and (ObjUprav[i].MenuID = KeyMenu_RazdeRejim) then
             begin
-              SetCursorPos(ObjUPrav[i].Box.Right-shiftscr-60, ObjUPrav[i].Box.Bottom-8); break;
+              SetCursorPos(ObjUPrav[i].Box.Right-shiftscr-60, ObjUPrav[i].Box.Bottom-8);
+              break;
             end;
           end;
         end;
@@ -1524,32 +1431,20 @@ begin
       end;
     end;
 
-    VK_PRIOR :
-    begin
-{$IFDEF DEBUG}
-    // сдвиг экранов табло влево
-      if shiftscr >= 800 then shiftscr := shiftscr - 800 else begin shiftscr := 0; Beep; end;
-{$ENDIF}
-    end;
-
-    VK_NEXT :
-    begin
-{$IFDEF DEBUG}
-    // сдвиг экранов табло вправо
-      if shiftscr < (configru[config.ru].TabloSize.X - configru[config.ru].MonSize.X) then shiftscr := shiftscr + 800 else Beep;
-{$ENDIF}
-    end;
-
     VK_F1 :
     begin
       if Shift = [] then
       begin
         if WorkMode.MarhUpr then
         begin // Установить раздельный режим управления
-          DspMenu.obj := 0; CreateDSPMenu(KeyMenu_RazdeRejim,LastX,LastY); SelectCommand;
+          DspMenu.obj := 0;
+          CreateDSPMenu(KeyMenu_RazdeRejim,LastX,LastY);
+          SelectCommand;
         end else
         begin // Установить маршрутный режим управления
-          DspMenu.obj := 0; CreateDSPMenu(KeyMenu_MarshRejim,LastX,LastY); SelectCommand;
+          DspMenu.obj := 0;
+          CreateDSPMenu(KeyMenu_MarshRejim,LastX,LastY);
+          SelectCommand;
         end;
       end;
     end;
@@ -1558,7 +1453,9 @@ begin
     begin
       if Shift = [] then // Ввод времени
       begin
-        DspMenu.obj := 0; CreateDSPMenu(KeyMenu_DateTime,LastX,LastY); SelectCommand;
+        DspMenu.obj := 0;
+        CreateDSPMenu(KeyMenu_DateTime,LastX,LastY);
+        SelectCommand;
       end;
     end;
 
@@ -1566,7 +1463,9 @@ begin
     begin
       if Shift = [] then // ввод номера поезда
       begin
-        DspMenu.obj := 20002; CreateDSPMenu(KeyMenu_VvodNomeraPoezda,LastX,LastY); SelectCommand;
+        DspMenu.obj := 20002;
+        CreateDSPMenu(KeyMenu_VvodNomeraPoezda,LastX,LastY);
+        SelectCommand;
       end;
     end;
 
@@ -1589,20 +1488,29 @@ begin
 
     VK_F6 :
     begin
-      if Shift = [ssShift,ssAlt,ssCtrl] then
-      begin // отключить управление в случае экстренной необходимости
-        if Application.MessageBox('Подтвердите завершение работы РМ-ДСП','РМ-ДСП',MB_OKCANCEL) = IDOK then
-        begin
-          ReBoot := false; Application.Terminate;
-        end;
 {$IFDEF DEBUG}
-      end else
 // Включить управление для проверки без сервера
-      if Shift = [] then
+{      if Shift = [] then
       begin
         WorkMode.Upravlenie := true; WorkMode.LockCmd := false; StartRM := false;
+      end;}
 {$ENDIF}
-      end;
+    end;
+
+    VK_PRIOR :
+    begin
+{$IFDEF DEBUG}
+    // сдвиг экранов табло влево
+      if shiftscr >= 800 then shiftscr := shiftscr - 800 else begin shiftscr := 0; Beep; end;
+{$ENDIF}
+    end;
+
+    VK_NEXT :
+    begin
+{$IFDEF DEBUG}
+    // сдвиг экранов табло вправо
+      if shiftscr < (configru[config.ru].TabloSize.X - configru[config.ru].MonSize.X) then shiftscr := shiftscr + 800 else Beep;
+{$ENDIF}
     end;
 
     VK_F7 :
@@ -1615,7 +1523,8 @@ begin
           if (DesktopSize.X >= configru[1].TabloSize.X) and (DesktopSize.Y >= configru[1].TabloSize.Y) then
 {$ENDIF}
           begin
-            InsNewArmCmd($7fec,0); NewRegion := 1; ChRegion := true;
+//            AddDspMenuItem(GetShortMsg(1,226, ''), CmdMenu_RU1,ID_Obj);
+            NewRegion := 1; ChRegion := true;
           end;
         end;
         if config.ru <> 2 then
@@ -1624,7 +1533,8 @@ begin
           if (DesktopSize.X >= configru[2].TabloSize.X) and (DesktopSize.Y >= configru[2].TabloSize.Y) then
 {$ENDIF}
           begin
-            InsNewArmCmd($7feb,0); NewRegion := 2; ChRegion := true;
+//            AddDspMenuItem(GetShortMsg(1,227, ''), CmdMenu_RU2,ID_Obj);
+            NewRegion := 2; ChRegion := true;
           end;
         end;
       end;
@@ -1633,32 +1543,17 @@ begin
 
     VK_F8 :
     begin // переключатель подсветки номера поездов
-      if Shift = [] then
-      begin
-        DspMenu.obj := 20003; CreateDSPMenu(KeyMenu_PodsvetkaNomerov,LastX,LastY); SelectCommand;
-{$IFDEF SAVEKANAL}
-      end else
-      if Shift = [ssCtrl] then
-      begin
-        sl := TStringList.Create;
-        sl.Text := trmkvit;
-        sl.SaveToFile('trm.txt');
-        sl.Text := rcvkvit;
-        sl.SaveToFile('rsv.txt');
-        trmkvit := '';
-        rcvkvit := '';
-        sl.Free;
-{$ENDIF}
-      end;
+      DspMenu.obj := 20003;
+      CreateDSPMenu(KeyMenu_PodsvetkaNomerov,LastX,LastY);
+      SelectCommand;
     end;
 
 
     VK_F9 :
     begin // переключатель подсветки положения стрелок, района местного управления
-      if Shift = [] then
-      begin
-        DspMenu.obj := 20001; CreateDSPMenu(KeyMenu_PodsvetkaStrelok,LastX,LastY); SelectCommand;
-      end;
+      DspMenu.obj := 20001;
+      CreateDSPMenu(KeyMenu_PodsvetkaStrelok,LastX,LastY);
+      SelectCommand;
     end;
 
     VK_F10 :
@@ -1724,7 +1619,15 @@ begin
 
     VK_F12 :
     begin // Сброс фиксируемого звонка
-      InsNewArmCmd($7fe8,0); sound := false;
+      sound := false;
+    end;
+
+    VK_INSERT :
+    begin // Просмотр списка значений FR3, FR4
+      if Shift = [ssShift,ssCtrl] then
+      begin
+        FrForm.Show;
+      end;
     end;
 
   else
@@ -1733,70 +1636,40 @@ begin
 end;
 
 var
-  lastCurOK : boolean;
-
+  cntrsv : array[1..2] of integer;
 //------------------------------------------------------------------------------
 // обработчик главного таймера табло
 procedure TTabloMain.MainTimerTimer(Sender: TObject);
   var gts : TSystemTime; st,i : integer; bh,bl,b : byte; ec: cardinal;
 begin
-try
-{$IFNDEF DEBUG} shiftscr := 0; {$ENDIF}
-
-  if LoopHandle > 0 then
+  if Application.MainForm <> nil then
   begin
-    if GetExitCodeThread(LoopHandle,ec) then
+    if Application.MainForm.WindowState = wsMinimized then
+      Application.MainForm.WindowState := wsNormal;
+    if not Application.MainForm.Visible then
     begin
-      if (ec <> STILL_ACTIVE) and LoopSync then
-      begin // повторить инициализацию потока обработки каналов АРМ-Сервер
-        reportf('Перезапуск потока обслуживания каналов связи АРМ-Сервер');
-        CloseHandle(LoopHandle);
-        LoopHandle := CreateThread(nil,0,@SyncReadyThread,nil,0,ec); // начать обслуживание каналов
-        reportf('Поток обработки канала АРМ-Сервер запущен. ThreadID='+IntToStr(ec));
-      end;
+      Application.MainForm.Visible := true;
+      SetForegroundWindow(Application.Handle);
     end;
-  end else
-  if LoopSync then
-  begin
-    reportf('Перезапуск потока обслуживания каналов связи АРМ-Сервер');
-    LoopHandle := CreateThread(nil,0,@SyncReadyThread,nil,0,ec); // начать обслуживание каналов
-    reportf('Поток обработки канала АРМ-Сервер запущен. ThreadID='+IntToStr(ec));
   end;
 
-  if LockTablo then exit;
-
-  if Assigned(Application.MainForm) then
-  begin
-    if Application.MainForm.WindowState = wsMinimized then Application.MainForm.WindowState := wsNormal;
-    if not Application.MainForm.Visible then begin Application.MainForm.Visible := true; SetForegroundWindow(Application.Handle); end;
-  end;
-
-  inc(GlobusIndex); if GlobusIndex > 31 then GlobusIndex := 0; // прокрутить глобус
+  inc(GlobusIndex); if GlobusIndex > (31*8) then GlobusIndex := 0; // прокрутить глобус
 
   LastTime := Date+Time;                   // Сохранить момент последнего чтения из канала
-
-  if dMigTablo < LastTime then
-  begin // организовать мигающую индикацию
-    tab_page := not tab_page; dMigTablo := LastTime + MigInterval / 86400;
-  end;
-
   if CanFocus then DspMenu.Ready := false; // Управление курсором направить в табло
 
-
-
-
-if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > RefreshTimeOut) then inc(CntSyncTO);
-
-
-
-
   try
-    if (LastTime - LastSync > RefreshTimeOut) or MySync[1] or MySync[2] then // интервал регенерации табло
+    SyncReady; // Ожидание новых данных и синхронизации канала сервер-арм
+    if LastTime - LastSync > RefreshTimeOut then // интервал 0,33 сек.
     begin // Пора рисовать на табло
-      MySync[1] := false; MySync[2] := false;
-    // определить остановку обмена по каналу АРМ-Сервер
-      if KanalSrv[1].lastcnt < 70 then inc(KanalSrv[1].lostcnt) else KanalSrv[1].lostcnt := 0; if KanalSrv[1].lostcnt > 10 then begin KanalSrv[1].iserror := true; KanalSrv[1].lostcnt := 0; end;
-      if KanalSrv[2].lastcnt < 70 then inc(KanalSrv[2].lostcnt) else KanalSrv[2].lostcnt := 0; if KanalSrv[2].lostcnt > 10 then begin KanalSrv[2].iserror := true; KanalSrv[2].lostcnt := 0; end;
+    // проверить обмен по 1-му каналу
+      inc(cntrsv[1]);
+      if (KanalSrv[1].rcvcnt < 70) and (KanalSrv[1].cnterr > 4) then KanalSrv[1].iserror := true;
+      if cntrsv[1] > 3 then begin cntrsv[1] := 0; KanalSrv[1].rcvcnt := 0; end else inc(KanalSrv[1].cnterr);
+    // проверить обмен по 2-му каналу
+      inc(cntrsv[2]);
+      if (KanalSrv[2].rcvcnt < 70) and (KanalSrv[2].cnterr > 4) then KanalSrv[2].iserror := true;
+      if cntrsv[2] > 3 then begin cntrsv[2] := 0; KanalSrv[2].rcvcnt := 0; end else inc(KanalSrv[2].cnterr);
 
     // Перерисовка экрана
       if not RefreshTablo then begin DateTimeToString(sMsg, 'dd/mm/yy h:nn:ss.zzz', LastTime); reportf('Сбой регенерации табло '+ sMsg); end;
@@ -1827,26 +1700,28 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
         end;
       end;
 
-      if Assigned(MsgFormDlg) then
+      if OpenMsgForm then
       begin
-        if OpenMsgForm then
+        OpenMsgForm := false;
+        MsgFormDlg.Left := 0; MsgFormDlg.Top := 0;
+        MsgFormDlg.Width := configru[config.ru].MonSize.X;
+        MsgFormDlg.Height := configru[config.ru].MonSize.Y;
+        MsgFormDlg.Show;
+        UpdateMsgQuery := true;
+      end;
+
+      if (MsgFormDlg <> nil) and MsgFormDlg.Visible then
+      begin
+        if NewNeisprav then
         begin
-          OpenMsgForm := false;
-          MsgFormDlg.Left := 0; MsgFormDlg.Top := 0;
-          MsgFormDlg.Width := configru[config.ru].MonSize.X;
-          MsgFormDlg.Height := configru[config.ru].MonSize.Y;
-          MsgFormDlg.Show;
-          UpdateMsgQuery := true;
+          NewNeisprav := false; MsgFormDlg.BtnUpdate.Enabled := true;
         end;
-        if MsgFormDlg.Visible then
+        if UpdateMsgQuery then
         begin
-          if NewNeisprav then begin NewNeisprav := false; MsgFormDlg.BtnUpdate.Enabled := true; end;
-          if UpdateMsgQuery then
-          begin
-            MsgFormDlg.BtnUpdate.Enabled := false; UpdateMsgQuery := false;
-            st := 1; i := 0; while st <= Length(ListNeisprav) do begin if ListNeisprav[st] = #10 then inc(i); if i < 700 then inc(st) else begin SetLength(ListNeisprav,st); break; end; end; MsgFormDlg.Memo.Lines.Text := ListNeisprav;
-            st := 1; i := 0; while st <= Length(ListDiagnoz) do begin if ListDiagnoz[st] = #10 then inc(i); if i < 700 then inc(st) else begin SetLength(ListDiagnoz,st); break; end; end; MsgFormDlg.MemoUVK.Lines.Text := ListDiagnoz;
-          end;
+          MsgFormDlg.BtnUpdate.Enabled := false;
+          UpdateMsgQuery := false;
+          st := 1; i := 0; while st <= Length(ListNeisprav) do begin if ListNeisprav[st] = #10 then inc(i); if i < 700 then inc(st) else begin SetLength(ListNeisprav,st); break; end; end; MsgFormDlg.Memo.Lines.Text := ListNeisprav;
+          st := 1; i := 0; while st <= Length(ListDiagnoz) do begin if ListDiagnoz[st] = #10 then inc(i); if i < 700 then inc(st) else begin SetLength(ListDiagnoz,st); break; end; end; MsgFormDlg.MemoUVK.Lines.Text := ListDiagnoz;
         end;
       end;
 
@@ -1855,9 +1730,17 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
         SaveArch(2);
         if DspToArcEnabled then // ДСП-АРХИВ
         begin // передать архив по каналу ДСП-АРХИВ
-          if DspToArcConnected and DspToArcAdresatEn and not DspToArcPending and (LenArc > 0) then begin SendDspToArc(@BuffArc[1],LenArc); LenArc := 0; end;
+          if DspToArcConnected and DspToArcAdresatEn and not DspToArcPending and (LenArc > 0) then
+          begin
+            SendDspToArc(@BuffArc[1],LenArc); LenArc := 0;
+          end;
         end;
       end;
+
+// Технологическая функция - сохранить данные, полученные из канала
+if savearc then SaveKanal;
+
+
 
     {обработать состояние системы}
 
@@ -1867,7 +1750,12 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
       begin
         if cntObjZav <= WorkMode.LimitObjZav then
         begin
-          if not CalcCRC_OZ(cntObjZav) then begin InsNewArmCmd($7ffc,0); ShowShortMsg(247,LastX,LastY,'объекта зависимостей в строке '+ IntToStr(cntObjZav)); Beep; end;
+          if not CalcCRC_OZ(cntObjZav) then
+          begin
+            InsNewArmCmd($7ffc,0);
+            PutShortMsg(1,LastX,LastY,'Искажение константной части описания объекта зависимостей в строке '+ IntToStr(cntObjZav));
+            Beep;
+          end;
           inc(cntObjZav);
         end else
         begin
@@ -1882,7 +1770,12 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
         begin
           if ObjView[cntObjView].TypeObj <> 0 then
           begin
-            if not CalcCRC_OV(cntObjView) then begin InsNewArmCmd($7ffc,0); ShowShortMsg(247,LastX,LastY,'объекта табло в строке '+ IntToStr(cntObjView)); Beep; end;
+            if not CalcCRC_OV(cntObjView) then
+            begin
+              InsNewArmCmd($7ffc,0);
+              PutShortMsg(1,LastX,LastY,'Искажение константной части описания объекта табло в строке '+ IntToStr(cntObjView));
+              Beep;
+            end;
           end;
           inc(cntObjView);
         end else
@@ -1898,7 +1791,12 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
         begin
           if ObjUprav[cntObjUprav].RU <> 0 then
           begin
-            if not CalcCRC_OU(cntObjUprav) then begin InsNewArmCmd($7ffc,0); ShowShortMsg(247,LastX,LastY,'объекта управления в строке '+ IntToStr(cntObjUprav)); Beep; end;
+            if not CalcCRC_OU(cntObjUprav) then
+            begin
+              InsNewArmCmd($7ffc,0);
+              PutShortMsg(1,LastX,LastY,'Искажение константной части описания объекта управления в строке '+ IntToStr(cntObjUprav));
+              Beep;
+            end;
           end;
           inc(cntObjUprav);
         end else
@@ -1914,7 +1812,12 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
         begin
           if (OVBuffer[cntOVBuffer].TypeRec <> 0) or (OVBuffer[cntOVBuffer].Jmp1 <> 0) or (OVBuffer[cntOVBuffer].Jmp2 <> 0) then
           begin
-            if not CalcCRC_VB(cntOVBuffer) then begin InsNewArmCmd($7ffc,0); PutShortMsg(247,LastX,LastY,'буфера отображения в строке '+ IntToStr(cntOVBuffer)); Beep; end;
+            if not CalcCRC_VB(cntOVBuffer) then
+            begin
+              InsNewArmCmd($7ffc,0);
+              PutShortMsg(1,LastX,LastY,'Искажение константной части описания буфера отображения в строке '+ IntToStr(cntOVBuffer));
+              Beep;
+            end;
           end;
           inc(cntOVBuffer);
         end else
@@ -1950,21 +1853,12 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
       end;
 {$ENDIF}
 
-      if WorkMode.OtvKom <> lastCurOK then begin lastCurOK := WorkMode.OtvKom; if WorkMode.OtvKom then InsNewArmCmd($7fe6,0) else InsNewArmCmd($7fe5,0); end;
-
-      if WorkMode.CmdReady or WorkMode.MarhRdy then
-        Cursor := crAppStart // при занятости канала АРМ-Сервер
-      else
-      begin // при свободности канала АРМ-Сервер
-        if WorkMode.OtvKom then Cursor := curTablo1ok else Cursor := crArrow;
-      end;
-
-      if WorkMode.OtvKom then begin ShowCursor(false); ShowCursor(true); end; // при многоэкранном табло выявлен дефект ПО - исчезает курсор в режиме ОК. Данная штука помогает
+      if WorkMode.OtvKom then begin Cursor := curTablo1ok; end else begin Cursor := curTablo1; end;
 
       if ChRegion then ChangeRegion(NewRegion); // выполнить изменение района управления
       if ChDirect then ChangeDirectState(StDirect); // выполнить изменение состояния управления
 
-      if WorkMode.Upravlenie and WorkMode.OU[0] and Assigned(ObjectWav) and Assigned(IpWav) then
+      if WorkMode.Upravlenie and WorkMode.OU[0] then
       begin // дать короткий звонок требуемой тональности
         if Ip1Beep then begin Ip1Beep := false;  PlaySound(PAnsiChar(IpWav.Strings[0]),0,SND_ASYNC); end else // 1 приближение
         if Ip2Beep then begin Ip2Beep := false; PlaySound(PAnsiChar(IpWav.Strings[1]),0,SND_ASYNC); end else  // 2 приближение
@@ -1979,83 +1873,9 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
         PutShortMsg(MsgStateClr,LastX,LastY,MsgStateRM); MsgStateRM := '';
       end;
 
-  // обработка канала ДСП - ДСП
-
-      // сформировать байт приоритета массива ярлыков
-      IkonPri := $1f;
-      if (StartTime+15/86400) < LastTime then IkonPri := IkonPri and $ff-$10; // ожидать 15 секунд от запуска АРМа до установки права передачи табличек на другие АРМы
-      if IkonNew then IkonPri := IkonPri and $ff-$8;
-      if WorkMode.Upravlenie then IkonPri := IkonPri and $ff-$4;
-      if config.ru = config.def_ru then IkonPri := IkonPri and $ff-$2;
-      if config.Master then IkonPri := IkonPri and $ff-$1;
-
-      // потоки АСУ
-      if DspToDspEnabled then // ДСП-ДСП
-      begin
-        if DspToDspThread > 0 then
-        begin
-          if GetExitCodeThread(DspToDspThread,ec) then
-          begin // проверить исполнение потока обработки трубы АСУ1
-            if (ec <> STILL_ACTIVE) and not IsBreakKanalASU then
-            begin
-              CloseHandle(DspToDspThread);
-              AddFixMessage('Разрыв связи по каналу АСУ1',4,6);
-              case DspToDspType of
-                1 : DspToDspThread := CreateThread(nil,0,@DspToDspClientProc,DspToDspParam,0,DspToDspThreadID); // клиент АСУ1
-              else
-                DspToDspThread := CreateThread(nil,0,@DspToDspServerProc,DspToDspParam,0,DspToDspThreadID);     // сервер АСУ1
-              end;
-              if DspToDspThread = 0 then reportf('Ошибка создания процесса обработки канала АСУ1. '+ DateTimeToStr(LastTime));
-            end else
-            begin // обработать данные по приему из канала АСУ1
-              // принять таблички из канала ДСП-ДСП2 (АСУ1)
-              if DspToDspInputBufPtr > 0 then ExtractPacketASU(@DspToDspInputBuf[0],@DspToDspInputBufPtr);
-              DspToDspSucces := false; // сбросить буфер приема
-            end;
-          end;
-        end else
-        if not IsBreakKanalASU then
-        begin
-          case DspToDspType of
-            1 : DspToDspThread := CreateThread(nil,0,@DspToDspClientProc,DspToDspParam,0,DspToDspThreadID); // клиент АСУ1
-          else
-            DspToDspThread := CreateThread(nil,0,@DspToDspServerProc,DspToDspParam,0,DspToDspThreadID);     // сервер АСУ1
-          end;
-          if DspToDspThread = 0 then reportf('Ошибка создания процесса обработки канала АСУ1. '+ DateTimeToStr(LastTime));
-        end;
-        if IkonSend then
-        begin // передать таблички по каналу ДСП-ДСП2 (АСУ1)
-          if DspToDspConnected and DspToDspAdresatEn and not DspToDspPending then
-          begin
-            IkonNew := false; IkonSend := false; IkonkiPack; // сформировать массив табличек
-            SendDspToDsp(@IkonkiOut[0],1007); // передать таблички на другой РМ-ДСП
-          end;
-        end;
-      end;
-      if DspToArcEnabled then // ДСП-АРХИВ
-      begin
-        if DspToArcThread > 0 then
-        begin
-          if GetExitCodeThread(DspToArcThread,ec) then
-          begin // проверить исполнение потока обработки трубы АРХИВ
-            if (ec <> STILL_ACTIVE) and not IsBreakKanalASU then
-            begin
-              CloseHandle(DspToArcThread);
-              AddFixMessage('Разрыв связи по каналу удаленного архива',4,6);
-              DspToArcThread := CreateThread(nil,0,@DspToARCProc,DspToArcParam,0,DspToArcThreadID); // клиент АРХИВ
-              if DspToArcThread = 0 then reportf('Ошибка создания процесса обработки канала хранилища удаленного архива. '+ DateTimeToStr(LastTime));
-            end;
-          end;
-        end else
-        if not IsBreakKanalASU then
-        begin
-          DspToArcThread := CreateThread(nil,0,@DspToARCProc,DspToArcParam,0,DspToArcThreadID); // клиент АРХИВ
-          if DspToArcThread = 0 then reportf('Ошибка создания процесса обработки канала хранилища удаленного архива. '+ DateTimeToStr(LastTime));
-        end;
-      end;
 
     end;
-    // конец обработки процедур, выполняемых после получения признака синхронизации из канала или по превышению времени ожидания
+    MySync[1] := false; MySync[2] := false;
 
     if SendToSrvCloseRMDSP then
       if CmdSendT + (3/86400) < LastTime then
@@ -2084,7 +1904,7 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
       begin // проверить время ожидания выдачи команды на сервер
         if CmdSendT + (4/86400) < LastTime then
         begin // превышено время ожидания команды
-          InsArcNewMsg(0,296); CmdCnt := 0; WorkMode.MarhRdy := false; WorkMode.CmdReady := false; // сброс команд
+          InsNewArmCmd($7ffd,0); CmdCnt := 0; WorkMode.MarhRdy := false; WorkMode.CmdReady := false; // сброс команд
           if not StartRM then AddFixMessage(GetShortMsg(1,296,GetNameObjZav(CmdBuff.LastObj)),4,1);
         end;
       end;
@@ -2100,22 +1920,77 @@ if MySync[1] or MySync[2] then inc(CntSyncCh) else if (LastTime - LastSync > Ref
       if TimeLockCmdDsp < (LastTime - 0.5/86400) then LockCommandDsp := false;
     end;
 
+    // Отработать команду синхронизации времени
+    SetDateTimeARM(DateTimeSync);
+
+
+
+// обработка канала ДСП - ДСП
+
+    // сформировать байт приоритета массива ярлыков
+    IkonPri := $1f;
+    if not StartRM then IkonPri := IkonPri and $ff-$10;
+    if IkonNew then IkonPri := IkonPri and $ff-$8;
+    if WorkMode.Upravlenie then IkonPri := IkonPri and $ff-$4;
+    if config.ru = config.def_ru then IkonPri := IkonPri and $ff-$2;
+    if config.Master then IkonPri := IkonPri and $ff-$1;
+
+    // потоки АСУ
+    if DspToDspEnabled then // ДСП-ДСП
+    begin
+      if GetExitCodeThread(DspToDspThread,ec) then
+      begin // проверить исполнение потока обработки трубы АСУ1
+        if (ec <> STILL_ACTIVE) and not IsBreakKanalASU then
+        begin
+          AddFixMessage('Разрыв связи по каналу АСУ1',4,6);
+          case DspToDspType of
+            1 : DspToDspThread := CreateThread(nil,0,@DspToDspClientProc,DspToDspParam,0,DspToDspThreadID); // клиент АСУ1
+          else
+            DspToDspThread := CreateThread(nil,0,@DspToDspServerProc,DspToDspParam,0,DspToDspThreadID);     // сервер АСУ1
+          end;
+          if DspToDspThread = INVALID_HANDLE_VALUE then
+            reportf('Ошибка создания процесса обработки канала АСУ1. '+ DateTimeToStr(LastTime));
+        end else
+        begin // обработать данные по приему из канала АСУ1
+          // принять таблички из канала ДСП-ДСП2 (АСУ1)
+          if DspToDspInputBufPtr > 0 then ExtractPacketASU(@DspToDspInputBuf[0],@DspToDspInputBufPtr);
+          DspToDspSucces := false; // сбросить буфер приема
+        end;
+      end;
+      if IkonSend then
+      begin // передать таблички по каналу ДСП-ДСП2 (АСУ1)
+        if DspToDspConnected and DspToDspAdresatEn and not DspToDspPending then
+        begin
+          IkonNew := false; IkonSend := false;
+          IkonkiPack; // сформировать массив табличек
+          SendDspToDsp(@IkonkiOut[0],1007); // передать таблички на другой РМ-ДСП
+        end;
+      end;
+    end;
+    if DspToArcEnabled then // ДСП-АРХИВ
+    begin
+      if GetExitCodeThread(DspToArcThread,ec) then
+      begin // проверить исполнение потока обработки трубы АРХИВ
+        if (ec <> STILL_ACTIVE) and not IsBreakKanalASU then
+        begin
+          AddFixMessage('Разрыв связи по каналу удаленного архива',4,6);
+          DspToArcThread := CreateThread(nil,0,@DspToARCProc,DspToArcParam,0,DspToArcThreadID); // клиент АРХИВ
+          if DspToArcThread = INVALID_HANDLE_VALUE then
+            reportf('Ошибка создания процесса обработки канала хранилища удаленного архива. '+ DateTimeToStr(LastTime));
+        end;
+      end;
+    end;
+
   finally
     MainTimer.Enabled := true;
   end;
-except
-  reportf('Ошибка [TabloForm.MainTimerTimer]'); Application.Terminate;
-end;
 end;
 
-var
-  FixVspPerevod : boolean;
 //------------------------------------------------------------------------------
 // Обновление образа табло
 function TTabloMain.RefreshTablo : Boolean;
-  var Delta : Double; a,b : boolean; ptr : SmallInt;
+  var Delta : Double; a,b : boolean;
 begin
-try
   LastSync := LastTime;
   PrepareOZ;
 
@@ -2132,106 +2007,101 @@ try
       if not WorkMode.OtvKom then
       begin // отпустили кнопку ответственных команд
         OtvCommand.Active := false; WorkMode.GoOtvKom := false; OtvCommand.Ready := false;
-        ShowShortMsg(156, LastX, LastY, ''); InsArcNewMsg(0,156); SingleBeep := true;
+        ShowShortMsg(156, LastX, LastY, '');
+        InsArcNewMsg(0,156);
+        SingleBeep := true;
       end else
       if OtvCommand.Second > 0 then
       begin
         if OtvCommand.Ready then
         begin // преждевременная исполнительная команда
           OtvCommand.Active := false; WorkMode.GoOtvKom := false;
-          ResetShortMsg; AddFixMessage(GetShortMsg(1,155,''),1,1); InsArcNewMsg(0,155);
+          ResetShortMsg;
+          AddFixMessage(GetShortMsg(1,155,''),1,1);
+          InsArcNewMsg(0,155);
         end else
         if (OtvCommand.Second = OtvCommand.Cmd) and (OtvCommand.Obj = OtvCommand.SObj) then
         begin // Обнаружена исполнительная команда
           OtvCommand.Active := false; WorkMode.GoOtvKom := false; OtvCommand.Ready := false;
-          DspCommand.Command := OtvCommand.Second; DspCommand.Obj := OtvCommand.SObj; DspCommand.Active  := true;
+          DspCommand.Command := OtvCommand.Second;
+          DspCommand.Obj     := OtvCommand.SObj;
+          DspCommand.Active  := true;
           SelectCommand;
         end else
         begin // Вторая команда не соответствует ожидаемой
           OtvCommand.Active := false; WorkMode.GoOtvKom := false; OtvCommand.Ready := false;
-          ResetShortMsg; AddFixMessage(GetShortMsg(1,153,''),1,1); InsArcNewMsg(0,153);
+          ResetShortMsg;
+          AddFixMessage(GetShortMsg(1,153,''),1,1);
+          InsArcNewMsg(0,153);
         end;
       end else
       begin // продолжить ожидание исполнительной команды
         if not (OtvCommand.Ready or (OtvCommand.SObj > 0)) then
         begin // вывод отсчета таймера
-          delta := delta * 84000; PutShortMsg(7, LastX, LastY, GetShortMsg(1,154, '') + FloatToStrF(delta,ffFixed,2,0));
+          delta := delta * 84000;
+          PutShortMsg(7, LastX, LastY, GetShortMsg(1,154, '') + FloatToStrF(delta,ffFixed,2,0));
         end;
       end;
     end else
     begin // Сброс ожидания по превышению времени
       OtvCommand.Active := false; WorkMode.GoOtvKom := false; OtvCommand.Ready := false;
-      ShowShortMsg(152, LastX, LastY, ''); InsArcNewMsg(0,152); SingleBeep := true;
+      ShowShortMsg(152, LastX, LastY, ObjZav[ObjZav[DspCommand.Obj].BaseObject].Liter + sMsg);
+      InsArcNewMsg(0,152); SingleBeep := true;
     end;
   end else
-
-  if VspPerevod.Active and // Ожидание нажатия кнопки выключения контроля при вспомогательном переводе
-     (VspPerevod.Strelka > 0) and (VspPerevod.Strelka <= WorkMode.LimitObjZav) then
+  if VspPerevod.Active then // Ожидание нажатия кнопки выключения контроля при вспомогательном переводе
   begin
-    ptr := ObjZav[VspPerevod.Strelka].BaseObject; // указатель на индекс объекта хвоста стрелки
-    if (ptr > 0) and (ptr <= WorkMode.LimitObjZav) then
+    Delta := VspPerevod.Reper - LastTime; // Остаток времени
+    if Delta > 0 then
     begin
-      Delta := VspPerevod.Reper - LastTime; // Остаток времени
-      if Delta > 0 then
-      begin
-        if ObjZav[ObjZav[ObjZav[VspPerevod.Strelka].BaseObject].ObjConstI[13]].bParam[1] then
-        begin // Нажата кнопка вспомогательного перевода - выдать команду
-          VspPerevod.Active := false; WorkMode.VspStr := false; FixVspPerevod := false;
-          DspCommand.Command := VspPerevod.Cmd; DspCommand.Obj := VspPerevod.Strelka; DspCommand.Active  := true;
-          SelectCommand;
-        end else
-        begin // Продолжить ожидание
-          delta := delta * 84000;
-          case VspPerevod.Cmd of
-            CmdStr_ReadyVPerevodPlus : begin
-              sMsg := GetShortMsg(1,99, ObjZav[ptr].Liter) + FloatToStrF(delta,ffFixed,2,0);
-              PutShortMsg(7, LastX, LastY, sMsg);
-              if not FixVspPerevod then begin InsArcNewMsg(ptr,99); FixVspPerevod := true; end;
-            end;
-            CmdStr_ReadyVPerevodMinus : begin
-              sMsg := GetShortMsg(1,100, ObjZav[ptr].Liter) + FloatToStrF(delta,ffFixed,2,0);
-              PutShortMsg(7, LastX, LastY, sMsg);
-              if not FixVspPerevod then begin InsArcNewMsg(ptr,100); FixVspPerevod := true; end;
-            end;
+      if ObjZav[ObjZav[ObjZav[VspPerevod.Strelka].BaseObject].ObjConstI[13]].bParam[1] then
+      begin // Нажата кнопка вспомогательного перевода - выдать команду
+        VspPerevod.Active := false; WorkMode.VspStr := false;
+        DspCommand.Command := VspPerevod.Cmd;
+        DspCommand.Obj     := VspPerevod.Strelka;
+        DspCommand.Active  := true;
+        SelectCommand;
+      end else
+      begin // Продолжить ожидание
+        delta := delta * 84000;
+        case VspPerevod.Cmd of
+          CmdStr_ReadyVPerevodPlus : begin
+            sMsg := GetShortMsg(1,99, ObjZav[ObjZav[VspPerevod.Strelka].BaseObject].Liter) + FloatToStrF(delta,ffFixed,2,0);
+            PutShortMsg(7, LastX, LastY, sMsg); InsArcNewMsg(VspPerevod.Strelka,99);
+          end;
+          CmdStr_ReadyVPerevodMinus : begin
+            sMsg := GetShortMsg(1,100, ObjZav[ObjZav[VspPerevod.Strelka].BaseObject].Liter) + FloatToStrF(delta,ffFixed,2,0);
+            PutShortMsg(7, LastX, LastY, sMsg); InsArcNewMsg(VspPerevod.Strelka,100);
           end;
         end;
-      end else
-      begin // Сбросить команду ВСП
-        VspPerevod.Active := false; WorkMode.VspStr := false; FixVspPerevod := false; ShowShortMsg(148, LastX, LastY, ObjZav[ptr].Liter); InsArcNewMsg(ptr,148);
       end;
     end else
-    begin // Сбросить команду ВСП при обнаружении сбоя
-      VspPerevod.Active := false; WorkMode.VspStr := false; FixVspPerevod := false;
+    begin // Сбросить команду ВСП
+      VspPerevod.Active := false; WorkMode.VspStr := false;
+      ShowShortMsg(148, LastX, LastY, ObjZav[ObjZav[DspCommand.Obj].BaseObject].Liter); InsArcNewMsg(VspPerevod.Strelka,148);
     end;
   end;
 
   mem_page := not mem_page;
+  if not mem_page then tab_page := not tab_page;
 
   if mem_page then DrawTablo(Tablo2) // Подготовка табло2 для отображения
   else DrawTablo(Tablo1);            // Подготовка табло1 для отображения
   Invalidate;                        // Перерисовка экрана
   result := true;
-except
-  reportf('Ошибка [TabloForm.TTabloMain.RefreshTablo]'); Application.Terminate; result := false;
-end;
 end;
 
 //------------------------------------------------------------------------------
 // обработчик таймера выработки звукового сигнала
 procedure TTabloMain.BeepTimerTimer(Sender: TObject);
 begin
-try
-  if WorkMode.Upravlenie and WorkMode.OU[0] and Sound and Assigned(ObjectWav) then PlaySound(PAnsiChar(ObjectWav.Strings[2]),0,SND_ASYNC);
-except
-  reportf('Ошибка [TabloForm.TTabloMain.BeepTimerTimer]'); Application.Terminate;
-end;
+  if WorkMode.Upravlenie and WorkMode.OU[0] and Sound then PlaySound(PAnsiChar(ObjectWav.Strings[2]),0,SND_ASYNC);
 end;
 
 //------------------------------------------------------------------------------
 // Инкремент счетчика ответственных команд
 procedure IncrementKOK;
 begin
-try
   inc(KOKCounter);
   reg.RootKey := HKEY_LOCAL_MACHINE;
   if Reg.OpenKey(KeyName, false) then
@@ -2239,9 +2109,6 @@ try
     if reg.ValueExists('KOK') then reg.WriteInteger('KOK',KOKCounter);
     reg.CloseKey;
   end;
-except
-  reportf('Ошибка [TabloForm.IncrementKOK]'); Application.Terminate;
-end;
 end;
 
 //------------------------------------------------------------------------------
@@ -2249,31 +2116,27 @@ end;
 {$IFNDEF DEBUG}
 procedure TTabloMain.KeyOtvKomState;
 begin
-try
   if (ConfigPortOK = '') and ((ConfigPortOK1 = '') or (ConfigPortOK2 = '')) then exit;
-  if not Assigned(PortOK) and (not Assigned(PortOK1) or not Assigned(PortOK2)) then exit;
+  if (PortOK = nil) and ((PortOK1 = nil) or (PortOK2 = nil)) then exit;
 
   if ConfigPortOK2 = '' then
   begin // кнопка с DTR
     case GetKOKStateKvit of
       0 : begin // неисправность КОК
-        InsArcNewMsg(0,314); MsgStateRM := GetShortMsg(1,314,''); MsgStateClr := 1; SingleBeep := true;
+        MsgStateRM := GetShortMsg(1,314,''); MsgStateClr := 1; SingleBeep := true;
       end;
     end;
   end else
   begin // Кнопка с Tx
     case GetKOKStateTx of
       0 : begin // неисправность КОК
-        InsArcNewMsg(0,314); MsgStateRM := GetShortMsg(1,314,''); MsgStateClr := 1; SingleBeep := true;
+        MsgStateRM := GetShortMsg(1,314,''); MsgStateClr := 1; SingleBeep := true;
       end;
       254 : begin // КОК подключена неправильно
-        InsArcNewMsg(0,340); AddFixMessage(GetShortMsg(1,340,''),4,3);
+        AddFixMessage(GetShortMsg(1,340,''),4,3);
       end;
     end;
   end;
-except
-  reportf('Ошибка [TabloForm.TTabloMain.KeyOtvKomState]'); Application.Terminate;
-end;
 end;
 {$ENDIF}
 
@@ -2282,7 +2145,6 @@ end;
 procedure PresetObjParams;
   var i : integer;
 begin
-try
   for i := 1 to High(ObjZav) do
     case ObjZav[i].TypeObj of
       2 : begin // стрелка
@@ -2314,7 +2176,7 @@ try
       end;
       15 : begin // АБ
         ObjZav[i].bParam[6] := false;
-        ObjZav[i].bParam[9] := false; // для МПЦ установить true;
+        ObjZav[i].bParam[9] := true;
       end;
       34 : begin // Питание
         ObjZav[i].bParam[1] := true;
@@ -2330,9 +2192,6 @@ try
   for i := 1 to FR_LIMIT do FR3s[i] := LastTime;
   for i := 1 to FR_LIMIT do FR4s[i] := LastTime;
 {$ENDIF}
-except
-  reportf('Ошибка [TabloForm.PresetObjParams]'); Application.Terminate;
-end;
 end;
 
 //------------------------------------------------------------------------------
@@ -2340,7 +2199,6 @@ end;
 procedure ChangeDirectState(State : Boolean);
   var i: Integer; f : Byte;
 begin
-try
   ChDirect := false;
 
   for i := 1 to High(ObjZav) do
@@ -2400,13 +2258,16 @@ try
   end;
 
   // сбросить список фиксированных сообщений
-  FixMessage.Count := 0; FixMessage.MarkerLine := 0; FixMessage.StartLine := 0;
-  maket_strelki_index := 0; maket_strelki_name  := '';
+  FixMessage.Count := 0;
+  FixMessage.MarkerLine := 0;
+  FixMessage.StartLine := 0;
 
   if State then
   begin // Получено разрешение на включение управления
     if not WorkMode.Upravlenie then
     begin // Выполнить переключение Резерв -> Управление
+      maket_strelki_index := 0;
+      maket_strelki_name  := '';
       for i := 1 to High(ObjZav) do
       begin // Установить состояния объектов
       // применить FR4
@@ -2416,7 +2277,8 @@ try
             ObjZav[i].bParam[19] := (f and $2) = $2; // макет
             if ObjZav[i].bParam[19] and (ObjZav[i].RU = config.ru) then
             begin // повесить литер стрелки на макетный шильдик
-              maket_strelki_index := i; maket_strelki_name  := ObjZav[i].Liter;
+              maket_strelki_index := i;
+              maket_strelki_name  := ObjZav[i].Liter;
             end;
             if ObjZav[i].ObjConstI[8] > 0 then
             begin // ограничения для ближней стрелки
@@ -2452,34 +2314,31 @@ try
             ObjZav[i].bParam[13] := (f and $4) = $4; // заблокирован
           end;
           15 : begin // АБ
-            f := fr4[ObjZav[i].ObjConstI[3] div 8]; // буфер FR4
+            f := fr4[ObjZav[i].ObjConstI[1]]; // буфер FR4
             ObjZav[i].bParam[25] := (f and $1) = $1; // закр.движ.пост.т
             ObjZav[i].bParam[26] := (f and $2) = $2; // закр.движ.пер.т
             ObjZav[i].bParam[13] := (f and $4) = $4; // закр.движ.
             ObjZav[i].bParam[24] := (f and $8) = $8; // закр.движ.э.т
           end;
           24 : begin // Увязка с ЭЦ
-            f := fr4[ObjZav[i].ObjConstI[8] div 8]; // буфер FR4
+            f := fr4[ObjZav[i].ObjConstI[1]]; // буфер FR4
             ObjZav[i].bParam[25] := (f and $1) = $1; // закр.движ.пост.т
             ObjZav[i].bParam[26] := (f and $2) = $2; // закр.движ.пер.т
             ObjZav[i].bParam[15] := (f and $4) = $4; // закр.движ.
             ObjZav[i].bParam[24] := (f and $8) = $8; // закр.движ.э.т
           end;
           26 : begin // РПБ
-            f := fr4[ObjZav[i].ObjConstI[13] div 8]; // буфер FR4
+            f := fr4[ObjZav[i].ObjConstI[1]]; // буфер FR4
             ObjZav[i].bParam[25] := (f and $1) = $1; // закр.движ.пост.т
             ObjZav[i].bParam[26] := (f and $2) = $2; // закр.движ.пер.т
             ObjZav[i].bParam[13] := (f and $4) = $4; // закр.движ.
             ObjZav[i].bParam[24] := (f and $8) = $8; // закр.движ.э.т
           end;
-          32 : begin // надвиг
-            f := fr4[ObjZav[i].ObjConstI[1]]; // буфер FR4
-            ObjZav[i].bParam[13] := (f and $4) = $4; // заблокирован
-          end;
         end;
       end;
-      SingleBeep := false; Sound := false; SingleBeep3 := false; SingleBeep2 := false; SingleBeep4 := false; SingleBeep5 := false; SingleBeep6 := false; Ip1Beep := false; Ip2Beep := false;
-      InsArcNewMsg(0,273); AddFixMessage(GetShortMsg(1,273,''),0,2);
+      SingleBeep := false; Sound := false;
+      SingleBeep3 := false; SingleBeep4 := false; SingleBeep5 := false; SingleBeep6 := false;
+      AddFixMessage(GetShortMsg(1,273,''),0,2);
       WorkMode.Upravlenie := true;
       MsgFormDlg.Hide; // Скрыть окно просмотра сообщений
     end;
@@ -2541,17 +2400,11 @@ try
             ObjZav[i].bParam[25] := false; // закр.движ.пост.т
             ObjZav[i].bParam[26] := false; // закр.движ.пер.т
           end;
-          32 : begin // надвиг
-            ObjZav[i].bParam[13] := false; // заблокирован
-          end;
         end;
       end;
-      InsArcNewMsg(0,274); AddFixMessage(GetShortMsg(1,274,''),0,2);
+      AddFixMessage(GetShortMsg(1,274,''),0,2);
     end;
   end;
-except
-  reportf('Ошибка [TabloForm.ChangeDirectState]'); Application.Terminate;
-end;
 end;
 
 //------------------------------------------------------------------------------
@@ -2559,7 +2412,6 @@ end;
 procedure ChangeRegion(RU : Byte);
   var i: Integer; f : Byte;
 begin
-try
   ChRegion := false;
   if ChDirect or WorkMode.Upravlenie or SendToSrvCloseRMDSP then exit;
   config.ru := RU;
@@ -2572,23 +2424,21 @@ try
         f := fr4[ObjZav[i].ObjConstI[1] div 8]; // буфер FR4
         if ((f and $2) = $2) and (ObjZav[i].RU = config.ru) then
         begin // повесить литер стрелки на макетный шильдик
-          maket_strelki_index := i; maket_strelki_name  := ObjZav[i].Liter;
+          maket_strelki_index := i;
+          maket_strelki_name  := ObjZav[i].Liter;
         end;
       end;
     end;
   end;
   ResetAllPlakat;
   SetParamTablo;
-except
-  reportf('Ошибка [TabloForm.ChangeRegion]'); Application.Terminate;
-end;
 end;
 
 //------------------------------------------------------------------------------
 // Блокировка запроса на изменение размеров окна
 procedure TTabloMain.FormCanResize(Sender: TObject; var NewWidth, NewHeight: Integer; var Resize: Boolean);
 begin
-  Resize := isChengeRegion;
+  Resize := false;
 end;
 
 //------------------------------------------------------------------------------

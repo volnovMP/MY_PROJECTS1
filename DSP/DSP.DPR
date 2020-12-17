@@ -17,13 +17,13 @@ uses
   Load in '..\Commons\Load.pas',
   Commons in '..\Commons\Commons.pas',
   VarStruct in '..\Commons\VarStruct.pas',
+  KanalArmSrv in 'KanalArmSrv.pas',
   ButtonOK in 'ButtonOK.pas',
   TabloForm in 'TabloForm.pas' {TabloMain},
   TimeInput in 'TimeInput.pas' {TimeInputDlg},
   MsgForm in 'MsgForm.pas' {MsgForm1Dlg},
   Password in 'Password.pas' {PasswordDlg},
-  ASUProc in 'ASUProc.pas',
-  KanalArmSrv in '..\Commons\KanalArmSrv.pas';
+  ASUProc in 'ASUProc.pas';
 
 {$R *.RES}
 
@@ -51,9 +51,9 @@ begin
       Application.Initialize;
       Application.Title := 'ÐÌ ÄÑÏ';
       Application.CreateForm(TTabloMain, TabloMain);
-  Application.CreateForm(TPasswordDlg, PasswordDlg);
-  Application.CreateForm(TFrForm, FrForm);
-  Application.Run;
+      Application.CreateForm(TPasswordDlg, PasswordDlg);
+      Application.CreateForm(TFrForm, FrForm);
+      Application.Run;
     end;
   end;
 end.

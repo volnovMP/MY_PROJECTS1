@@ -4,9 +4,9 @@ unit ButtonOK;
 //                Процедуры обработки кнопки ответственных команд
 //
 //  версия                    - 1
-//  редакция                  - 2
+//  редакция                  - 1
 //
-//  дата последнего изменения - 26 мая 2006г.
+//  дата последнего изменения - 1 февраля 2005г.
 //------------------------------------------------------------------------------
 
 interface
@@ -56,16 +56,19 @@ end;
 function InitKOK : boolean;
 begin
   InitKOK := false; UndefineState := false;
-  if (ConfigPortOK <> '') and Assigned(PortOK) then if not PortOK.InitPort(ConfigPortOK) then InitKOK := true;
-  if (ConfigPortOK1 <> '') and Assigned(PortOK1) then if not PortOK1.InitPort(ConfigPortOK1) then InitKOK := true;
-  if (ConfigPortOK2 <> '') and Assigned(PortOK2) then if not PortOK2.InitPort(ConfigPortOK2) then InitKOK := true;
+  if (ConfigPortOK <> '') and (PortOK <> nil) then
+    if not PortOK.InitPort(ConfigPortOK) then InitKOK := true;
+  if (ConfigPortOK1 <> '') and (PortOK1 <> nil) then
+    if not PortOK1.InitPort(ConfigPortOK1) then InitKOK := true;
+  if (ConfigPortOK2 <> '') and (PortOK2 <> nil) then
+    if not PortOK2.InitPort(ConfigPortOK2) then InitKOK := true;
 end;
 
 procedure FreeKOK;
 begin
-  if Assigned(PortOK) then PortOK.Free;
-  if Assigned(PortOK1) then PortOK1.Free;
-  if Assigned(PortOK2) then PortOK2.Free;
+  if PortOK <> nil then PortOK.Free;
+  if PortOK1 <> nil then PortOK1.Free;
+  if PortOK2 <> nil then PortOK2.Free;
 end;
 
 //------------------------------------------------------------------------------

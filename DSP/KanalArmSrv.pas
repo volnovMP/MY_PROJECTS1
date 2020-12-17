@@ -1,5 +1,4 @@
 unit KanalArmSrv;
-{$INCLUDE CfgProject}  // параметры компиляции
 //****************************************************************************
 //
 //       Процедуры работы с каналом Сервер - РМ ДСП
@@ -16,13 +15,15 @@ uses
 type TKanalErrors = (keOk,keErrCRC,keErrSrc,keErrDst);
 
 const
-  RCV_LIMIT = 4096;
+  RCV_LIMIT = 2048;
 
 type TKanal = record
     State   : Byte;
     config  : string;
     Index   : Byte;
     port    : TComPort;
+    hPipe   : cardinal; // идентификатор трубы
+    nPipe   : string;   // Имя трубы
     active  : Boolean;
     rcvsoob : string;   // массив полученых данных
     RcvBuf  : array[0..RCV_LIMIT-1] of char;
@@ -31,12 +32,7 @@ type TKanal = record
     issync  : boolean;
     iserror : boolean;
     cnterr  : integer;
-    rcvcnt  : integer; // счетчик количества принятых символов
-    pktcnt  : integer; // счетчик количества принятых пакетов
-    chklost : integer; // счетчик потерянных квитанций
-    pktlost : integer; // счетчик искаженных пакетов
-    lastcnt : integer; // счетчик количества принятых байт при последнем чтении канала
-    lostcnt : integer; // счетчик количества перебоев приема данных из канала
+    rcvcnt  : integer;
   end;
 
 const
@@ -49,19 +45,18 @@ PIPE_EXIT            = 4;
   LnSoobSrv  : integer = 70;    // длина сообщения от сервера
 
 var
-  AnsverTimeOut    : Double; //Максимальное время захвата канала арм-сервер после приема маркера
-  MaxTimeOutRecave : Double; //Максимальное время хранения данных в FR3 до сброса признака активизации (достоверности данных)
-  NewFR            : array[1..2] of string;     // буфер новизны для архива
-  NewCmd           : array[1..2] of string;     // буфер сообщений отосланых в сервер для архива
-  NewMenuC         : string;                    // буфер команд меню, использованных оператором
-  NewMsg           : string;                    // буфер сообщений из потока FR3
-  BackCRC          : array[1..20,1..2] of WORD; // буфер квитанций
-  LastCRC          : array[1..2] of Byte;       // Указатель на последнюю квитанцию
-  LastSrv          : array[1..2] of Byte;       // Номер запрашивающего сервера
-  CmdCnt           : Byte;                      // счетчик команд раздельного управления, готовых к передаче
-  DoubleCnt        : Byte;                      // счетчик параметров Double готовых к передаче на сервер
-  MySync           : array[1..2] of Boolean;    // признак последней синхронизации от данной стойки
-  MainLoopState    : Byte;                      // статус процедуры обработки состояний АРМа
+  AnsverTimeOut    : Double; // Значение допустимого максимального времени захвата канала арм-сервер после приема маркера
+  MaxTimeOutRecave : Double; // Значение допустимого максимального времени хранения данных в FR3 до сброса признака активизации (достоверности данных)
+  NewFR    : array[1..2] of string;     // буфер новизны для архива
+  NewCmd   : array[1..2] of string;     // буфер сообщений отосланых в сервер для архива
+  NewMenuC : string;                    // буфер команд меню, использованных оператором
+  NewMsg   : string;                    // буфер сообщений из потока FR3
+  BackCRC  : array[1..20,1..2] of WORD; // буфер квитанций
+  LastCRC  : array[1..2] of Byte;       // Указатель на последнюю квитанцию
+  LastSrv  : array[1..2] of Byte;       // Номер запрашивающего сервера
+  CmdCnt   : Byte;                      // счетчик команд раздельного управления, готовых к передаче
+  DoubleCnt: Byte;                      // счетчик параметров Double готовых к передаче на сервер
+  MySync   : array[1..2] of Boolean;    // признак последней синхронизации от данной стойки
 
 //  trmkvit : string; // квитанции по передаче в сервер
 //  rcvkvit : string; // квитанции по приему
@@ -131,21 +126,20 @@ function InitKanalSrv(kanal : Byte) : Byte;       // Инициализация канала
 function ConnectKanalSrv(kanal : Byte) : Byte;    // Установить связь по каналу
 function DisconnectKanalSrv(kanal : Byte) : Byte; // Разрыв связи по каналу
 
-function SyncReadyThread(var RdBuf: Pointer) : DWORD; // Процедура потока обработки каналов связи
 function SyncReady : Boolean;
 function GetFR5(param : Word) : Byte;
 function GetFR4State(param : Word) : Boolean;
 function GetFR3(const param : Word; var nep, ready : Boolean) : Boolean;
 function ReadSoobCom(kanal: Byte; var rcv: string) : Integer; // Процедура цикла чтения канала COM-ports
+function ReadSoobPipe(var RdBuf: Pointer) : DWORD;     // Процедура потока чтения канала PIPEs
 procedure WriteSoobCom(kanal: Byte);                   // Процедура передачи в канал COM-ports
+procedure WriteSoobPipe;                               // Процедура передачи в канал PIPEs
 function SaveArch(const c: byte) : Boolean;            // сохранить в архиве принятое сообщение
 function AddCheck(kanal : Byte; crc : Word) : Boolean; // Добавить новую квитанцию
 function SendCheck(kanal : Byte; var crc : Word) : Boolean; // Получить очередную квитанцию
 procedure ExtractSoobSrv(kanal : Byte); // распаковка сообщений из сервера
 procedure KvitancijaFromSrv(Obj : Word; Kvit : Byte); // обработка квитанции из сервера
-procedure SaveDUMP(buf,fname : string); // сохранение НЕХ - данных на диск
 procedure SaveKanal;
-procedure FixStatKanal(kanal : byte); // Сохранить в файле протокола статистику работы канала
 
 implementation
 
@@ -164,11 +158,11 @@ var
 var
 lpNBWri     : Cardinal;
 Buffer      : array[0..4097] of char;
-RcvOLS      : array[1..2] of TOverlapped; // Структура перекрытия приема для трубы
-TrmOLS      : array[1..2] of TOverlapped; // Структура перекрытия передачи для трубы
+RcvOLS      : TOverlapped;            // Структура перекрытия приема для трубы
+TrmOLS      : TOverlapped;            // Структура перекрытия передачи для трубы
 WrBuffer    : array[0..4097] of char; // буфер записи в трубу
-RcvComplete : array[1..2] of boolean;
-TrmComplete : array[1..2] of boolean;
+RcvComplete : boolean;
+TrmComplete : boolean;
 sz          : string;
 stime       : string;
 tbuf        : string;
@@ -179,16 +173,20 @@ tbuf        : string;
 function CreateKanalSrv : Boolean;
 begin
   try
-    RcvOLS[1].hEvent := INVALID_HANDLE_VALUE; TrmOLS[1].hEvent := INVALID_HANDLE_VALUE;
-    RcvOLS[2].hEvent := INVALID_HANDLE_VALUE; TrmOLS[2].hEvent := INVALID_HANDLE_VALUE;
     if KanalSrv[1].Index > 0 then
     begin // последовательный порт
-      KanalSrv[1].port := TComPort.Create(nil);
+      if KanalSrv[1].nPipe = '' then KanalSrv[1].port := TComPort.Create(nil);
+    end else
+    begin // труба
+      if KanalSrv[1].nPipe <> '' then
+      begin
+        RcvOLS.hEvent := CreateEvent(nil,true,true,nil);
+        TrmOLS.hEvent := CreateEvent(nil,true,true,nil);
+      end;
     end;
-
     if KanalSrv[2].Index > 0 then
     begin
-      KanalSrv[2].port := TComPort.Create(nil);
+      if KanalSrv[2].nPipe = '' then KanalSrv[2].port := TComPort.Create(nil);
     end;
     result := true;
   except
@@ -201,16 +199,12 @@ end;
 function DestroyKanalSrv : Boolean;
 begin
   try
-    if Assigned(KanalSrv[1].port) then KanalSrv[1].port.Destroy else
+    if KanalSrv[1].port <> nil then KanalSrv[1].port.Destroy else
     begin
-      if CloseHandle(RcvOLS[1].hEvent) then RcvOLS[1].hEvent := INVALID_HANDLE_VALUE;
-      if CloseHandle(TrmOLS[1].hEvent) then TrmOLS[1].hEvent := INVALID_HANDLE_VALUE;
+      CloseHandle(RcvOLS.hEvent); RcvOLS.hEvent := INVALID_HANDLE_VALUE;
+      CloseHandle(TrmOLS.hEvent); TrmOLS.hEvent := INVALID_HANDLE_VALUE;
     end;
-    if Assigned(KanalSrv[2].port) then KanalSrv[2].port.Destroy else
-    begin
-      if CloseHandle(RcvOLS[2].hEvent) then RcvOLS[2].hEvent := INVALID_HANDLE_VALUE;
-      if CloseHandle(TrmOLS[2].hEvent) then TrmOLS[2].hEvent := INVALID_HANDLE_VALUE;
-    end;
+    if KanalSrv[2].port <> nil then KanalSrv[2].port.Destroy;
     result := true;
   except
     result := false;
@@ -221,24 +215,27 @@ end;
 // Получить состояние канала
 function GetKanalSrvStatus(kanal : Byte) : Byte;
 begin
-  if (kanal < 1) or (kanal > 2) or not Assigned(KanalSrv[kanal].port) then
-    result := 255
-  else
-    result := 0;
+  if (kanal < 1) or (kanal > 2) or
+     ((KanalSrv[kanal].port = nil) and (KanalSrv[kanal].nPipe = '')) then
+  begin
+    result := 255; exit;
+  end;
+
+  result := 0;
 end;
 
 //-----------------------------------------------------------------------------
 // Инициализация канала
 function InitKanalSrv(kanal : Byte) : Byte;
 begin
-  if (kanal < 1) or (kanal > 2) or not Assigned(KanalSrv[kanal].port) then
+  if (kanal < 1) or (kanal > 2) or
+     ((KanalSrv[kanal].port = nil) and (KanalSrv[kanal].nPipe = '')) then
   begin
     DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
     reportf('Ошибка 255 инициализации канала'+ IntToStr(kanal)+ ' '+ stime);
     result := 255; exit;
   end;
-
-  if Assigned(KanalSrv[kanal].port) then
+  if KanalSrv[kanal].nPipe = '' then
   begin // СОМ-порт
     if KanalSrv[kanal].port.InitPort(IntToStr(KanalSrv[kanal].Index)+ ','+ KanalSrv[kanal].config) then
     begin
@@ -251,75 +248,96 @@ begin
       reportf('Ошибка 254 инициализации канала'+ IntToStr(kanal)+ ' '+ stime);
       result := 254;
     end;
-  end else result := 0;
+  end else
+  begin // труба
+    if kanal = 1 then
+    begin
+      DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
+      reportf('Выполнена инициализация трубы'+ IntToStr(kanal)+ ' '+ stime);
+    end;
+    result := 0;
+  end;
 end;
 
-//------------------------------------------------------------- Установить связь по каналу
+//-----------------------------------------------------------------------------
+// Установить связь по каналу
 function ConnectKanalSrv(kanal : Byte) : Byte;
-var 
-	Dummy : ULONG; 
-	th : THandle;
+  var Dummy : ULONG;
 begin
-	try
-		if (kanal < 1) or (kanal > 2) or not Assigned(KanalSrv[kanal].port) then
-		begin
-			DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
-			reportf('Ошибка открытия коммуникационного порта канала'+ IntToStr(kanal)+ ' '+ stime);
-			result := 255;
-			exit;
-		end;
-
-		KanalSrv[kanal].RcvPtr := 0;
-		if Assigned(KanalSrv[kanal].port) then
-		begin //----------------------------------------------------------- СОМ-порт
-			if KanalSrv[kanal].port.PortIsOpen then
-			begin
-				KanalSrv[kanal].active := true;
-        result := 0;
-			end else
-			if KanalSrv[kanal].port.OpenPort then
-			begin
-				PurgeComm(KanalSrv[kanal].port.PortHandle,PURGE_TXABORT+PURGE_RXABORT+PURGE_TXCLEAR+PURGE_RXCLEAR);
-				KanalSrv[kanal].active := true;
-				DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
-				reportf('Выполнено открытие порта канала'+ IntToStr(kanal)+ ' '+ stime);
-				result := 0;
-			end else
-			begin
-				result := 254;
-				DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
-				reportf('Не удается открыть коммуникационный порт канала'+ IntToStr(kanal)+ ' '+ stime);
-			end;
-		end
-    else
+  if (kanal < 1) or (kanal > 2) or
+     ((KanalSrv[kanal].port = nil) and (KanalSrv[kanal].nPipe = '')) then
+  begin
+    DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
+    reportf('Ошибка при открытии коммуникационного порта канала'+ IntToStr(kanal)+ ' '+ stime);
+    result := 255; exit;
+  end;
+  KanalSrv[kanal].RcvPtr := 0;
+  if KanalSrv[kanal].nPipe = '' then
+  begin // СОМ-порт
+    if KanalSrv[kanal].port.PortIsOpen then
     begin
-			DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
-			reportf('Ошибка открытия коммуникационного порта канала'+ IntToStr(kanal)+ ' '+ stime);
-			result := 255;
-			exit;
-		end;
-	except
-		on e: Exception do 
-		begin 
-			reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.ConnectKanalSrv]'); 
-			result := 253; 
-			WindowsReBoot; 
-		end;
-	end;
+      KanalSrv[kanal].active := true; result := 0;
+    end else
+    if KanalSrv[kanal].port.OpenPort then
+    begin
+      PurgeComm(KanalSrv[kanal].port.PortHandle,PURGE_TXABORT+PURGE_RXABORT+PURGE_TXCLEAR+PURGE_RXCLEAR);
+      KanalSrv[kanal].active := true;
+      KanalSrv[kanal].hPipe := KanalSrv[kanal].port.PortHandle;
+      DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
+      reportf('Выполнено открытие коммуникационного порта канала'+ IntToStr(kanal)+ ' '+ stime);
+      result := 0;
+    end else
+    begin
+      result := 254;
+      DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
+      reportf('Не удается открыть коммуникационный порт канала'+ IntToStr(kanal)+ ' '+ stime);
+    end;
+  end else
+  begin // труба
+    if kanal = 1 then
+    begin
+      KanalSrv[1].hPipe := INVALID_HANDLE_VALUE;
+      KanalSrv[1].State := 0; // разрешить чтение из трубы, запретить обработку в программе
+      KanalSrv[kanal].active := false;
+      KanalSrv[1].hPipe := CreateFile(
+      pchar(KanalSrv[1].nPipe),
+      GENERIC_READ or GENERIC_WRITE,
+      FILE_SHARE_READ or FILE_SHARE_WRITE,
+      nil,                    // вставить атрибуты секретности
+      OPEN_EXISTING,
+      FILE_FLAG_OVERLAPPED,
+      0);
+      if KanalSrv[1].hPipe = INVALID_HANDLE_VALUE then
+      begin
+        result := 254;
+        DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
+        reportf('Не удается открыть трубу канала'+ IntToStr(kanal)+ ' (код ошибки '+IntToStr(GetLastError()) +') '+ stime);
+      end else
+      begin
+        KanalSrv[1].State := 0; // разрешить чтение из трубы, запретить обработку в программе
+        CreateThread(nil,0,@ReadSoobPipe,nil,0,Dummy); // начать обслуживание потока трубы
+        DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
+        reportf('Выполнено подключение к серверу по каналу '+ KanalSrv[kanal].nPipe + ' '+ stime);
+        KanalSrv[kanal].active := true;
+        result := 0;
+      end;
+    end else
+      result := 0;
+  end;
 end;
 
 //-----------------------------------------------------------------------------
 // Разрыв связи по каналу
 function DisconnectKanalSrv(kanal : Byte) : Byte;
 begin
-try
-  if (kanal < 1) or (kanal > 2) or not Assigned(KanalSrv[kanal].port) then
+  if (kanal < 1) or (kanal > 2) or
+     ((KanalSrv[kanal].port = nil) and (KanalSrv[kanal].nPipe = '')) then
   begin
     DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
     reportf('Ошибка при закрытии коммуникационного порта канала'+ IntToStr(kanal)+ ' '+ stime);
     result := 255; exit;
   end;
-  if Assigned(KanalSrv[kanal].port) then
+  if KanalSrv[kanal].nPipe = '' then
   begin // COM-порт
     if KanalSrv[kanal].port.PortIsOpen then
     begin
@@ -333,252 +351,174 @@ try
         result := 253;
     end else
       result := 0;
+  end else
+  begin // труба
+    if kanal = 1 then
+    begin
+      if KanalSrv[kanal].hPipe = INVALID_HANDLE_VALUE then result := 0 else
+      if CloseHandle(KanalSrv[kanal].hPipe) then result := 0 else result := 253;
+      DateTimeToString(stime, 'dd/mm/yy h:nn:ss.zzz', Date+Time);
+      reportf('Отключен канал обмена с сервером '+ KanalSrv[kanal].nPipe+ ' '+ stime);
+      KanalSrv[kanal].State := PIPE_EXIT;
+      KanalSrv[kanal].active := false;
+      KanalSrv[kanal].hPipe := INVALID_HANDLE_VALUE;
+    end else result := 0;
   end;
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.DisconnectKanalSrv]'); result := 252; WindowsReBoot; end;
-end;
 end;
 
 
-//----------------------------------------------------------------------------------------
-//------------------ Обработка данных канального уровня, ожидание синхронизации от сервера
-function SyncReadyThread(var RdBuf: Pointer) : DWORD; // Процедура обработки каналов связи
-begin
-	try
-		while LoopSync do 
-		begin 
-			SyncReady; 
-			WaitForSingleObject(hWaitKanal,20); 
-		end;
-		ExitThread(0); 
-		result := 0;
-	except
-		on e: Exception do 
-		begin 
-			reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.SyncReadyThread]'); 
-			ExitThread(99); 
-			result := 99; 
-			WindowsReBoot; 
-		end;
-	end;
-end;
-
+//-----------------------------------------------------------------------------
+// Обработка данных канального уровня, ожидание синхронизации от сервера
 var
-  FixedDisconnect : array[1..2] of Boolean;
-  FixedConnect    : array[1..2] of Boolean;
-  FDT,FDT1,FDT2   : double;
-  fixch1, fixch2  : Boolean;
-
+  FixedDisconnect : Boolean;
+  FixedConnect : Boolean;
+  FDT : double;
 
 function SyncReady : Boolean;
-var 
-	i,j : integer;
+  var i,j : integer;
 begin
-	try
-		result := false;
-		if AppStart then exit;//до конца инициализации игнорировать канал АРМ-Сервер
-		if KanalType = 0 then
-    begin
-		if KanalSrv[1].active then
-		  begin
-			  i := ReadSoobCom(1,sz);
-				KanalSrv[1].lastcnt := i;
-				KanalSrv[1].rcvcnt := KanalSrv[1].rcvcnt + i;
-				if i > 0 then //---------------------------- прочитать данные из канала1
-				begin
-				  if not FixedConnect[1] then
-					begin //---------------- зафиксировать восстановление связи с сервером
-					  AddFixMessage(GetShortMsg(1,434,' по 1 каналу'),5,0);
-						InsArcNewMsg(0,434+$2000);
-          end;
-					FixedConnect[1] := true;
-					FixedDisconnect[1] := false;
+  result := false;
+  if AppStart then exit; // до окончания инициализации не обрабатывать канал АРМ-Сервер
 
-					if i >= 70 then
-					begin
-						inc(KanalSrv[1].cnterr);
-						KanalSrv[1].lostcnt := 0;
-					end;
-
-					KanalSrv[1].isrcv := true;
-					if KanalSrv[1].RcvPtr < 140 then KanalSrv[1].iserror := false;
-
-					if (i + KanalSrv[1].RcvPtr) > sizeof(KanalSrv[1].RcvBuf) then i := 0;
-					for j := 0 to i-1 do
-					begin
-						KanalSrv[1].RcvBuf[KanalSrv[1].RcvPtr] := KanalSrv[1].port.Buffer[j];
-						inc(KanalSrv[1].RcvPtr);
-					end;
-
-					if KanalSrv[1].RcvPtr > LnSoobSrv * 5 then
-					begin
-						inc(KanalSrv[1].cnterr); //--------- увеличить счетчик ошибок канала
-						reportf('Переполнение входного буфера канала 1 ('+
-						IntToStr(KanalSrv[1].RcvPtr)+' байт) '+ DateTimeToStr(LastTime));
-						KanalSrv[1].RcvPtr := 0;
-					end else   ExtractSoobSrv(1); //----- распаковка данных из 1-го канала
-					if MyMarker[1] then
-					begin //--------------- выставить признак синхронизации по 1-му каналу
-						MySync[1] := true;
-						MyMarker[1] := false;
-						KanalSrv[1].issync := true;
-						result := true;
-						WriteSoobCom(1); //---------------------- выдать в 1-ый канал данные
-					end;
-					fixch1 := false;
-				end else
-				begin
-  				if fixch1 then
-					begin
-						if FDT1 < LastTime then
-						begin
-							DisconnectKanalSrv(1);
-							AddFixMessage(GetShortMsg(1,433,' по 1 каналу'),4,4);
-							InsArcNewMsg(0,433+$1000);
-							FixedDisconnect[1] := true;
-							FixedConnect[1] := false;
-						end;
-					end else
-					begin //------------------ фиксируем момент отсутствия данных в канале
-						fixch1 := true;
-						FDT1 := LastTime + 20/86400;
-					end;
+  case KanalType of
+    //
+    // Для обмена с сервером используются два канала RS-422 в дуплексном режиме.
+    // Каналы не имеют приоритета, используются по готовности данных.
+    //
+    0 : begin
+      i := ReadSoobCom(1,sz);
+      KanalSrv[1].rcvcnt := KanalSrv[1].rcvcnt + i;
+      if i > 0 then // прочитать данные из канала1
+      begin
+        if not FixedConnect then
+        begin // зафиксировать восстановление связи с сервером
+          AddFixMessage(GetShortMsg(1,434,''),5,0); InsArcNewMsg(0,434+$2000);
         end;
-      end else
-			begin
-				fixch1 := false;
-				if KanalSrv[1].Index > 0 then
-				begin // если не было завершения обслуживания канала - фиксировать обрыв связи с попыткой восстановления соединения через 30 сек.
-					KanalSrv[1].iserror := true;
-          if FixedDisconnect[1] then
-          begin
-            if FDT1 < LastTime then
-            begin
-              ConnectKanalSrv(1);
-              FixedDisconnect[1] := false;
-              FixedConnect[1] := false;
-            end;
-          end else
-          begin
-            FixedDisconnect[1] := true;
-            FDT1 := LastTime + 30/86400;
-          end;
+        FixedConnect := true;
+        if i >= 70 then begin inc(KanalSrv[1].cnterr); end;
+        KanalSrv[1].isrcv := true;
+        if KanalSrv[1].RcvPtr < 140 then KanalSrv[1].iserror := false;
+
+        for j := 0 to i-1 do
+        begin
+          KanalSrv[1].RcvBuf[KanalSrv[1].RcvPtr] := KanalSrv[1].port.Buffer[j]; inc(KanalSrv[1].RcvPtr);
+        end;
+
+        if KanalSrv[1].RcvPtr > LnSoobSrv * 3 then
+        begin
+          inc(KanalSrv[1].cnterr); // увеличить счетчик ошибок канала
+          reportf('Переполнение входного буфера канала 1 ('+ IntToStr(KanalSrv[1].RcvPtr)+' байт) '+ DateTimeToStr(LastTime));
+          KanalSrv[1].RcvPtr := 0;
+        end else
+          ExtractSoobSrv(1); // распаковка данных из 1-го канала
+        if MyMarker[1] then
+        begin // выставить признак синхронизации по 1-му каналу
+          MySync[1] := true; MyMarker[1] := false; KanalSrv[1].issync := true; result := true;
+          WriteSoobCom(1); // выдать в 1-ый канал данные
         end;
       end;
 
-      if KanalSrv[2].active then
+      i := ReadSoobCom(2,sz);
+      KanalSrv[2].rcvcnt := KanalSrv[2].rcvcnt + i;
+      if i > 0 then // прочитать данные из канала2
       begin
-        i := ReadSoobCom(2,sz);
-        KanalSrv[2].lastcnt := i;
-        KanalSrv[2].rcvcnt := KanalSrv[2].rcvcnt + i;
-        if i > 0 then //---------------------------- прочитать данные из канала2
-        begin
-          if not FixedConnect[2] then
-          begin //---------------- зафиксировать восстановление связи с сервером
-            AddFixMessage(GetShortMsg(1,434,' по 2 каналу'),5,0);
-            InsArcNewMsg(0,434+$2000);
-          end;
-          FixedConnect[2] := true;
-          FixedDisconnect[2] := false;
-          if i >= 70 then
-          begin
-            inc(KanalSrv[2].cnterr);
-            KanalSrv[2].lostcnt := 0;
-          end;
-          KanalSrv[2].isrcv := true;
-          if KanalSrv[2].RcvPtr < 140 then KanalSrv[2].iserror := false;
+        if not FixedConnect then
+        begin // зафиксировать восстановление связи с сервером
+          AddFixMessage(GetShortMsg(1,434,''),5,0); InsArcNewMsg(0,434+$2000);
+        end;
+        FixedConnect := true;
+        if i >= 70 then begin inc(KanalSrv[2].cnterr); end;
+        KanalSrv[2].isrcv := true;
+        if KanalSrv[2].RcvPtr < 140 then KanalSrv[2].iserror := false;
 
-          if (i + KanalSrv[2].RcvPtr) > sizeof(KanalSrv[2].RcvBuf) then i := 0;
-          for j := 0 to i-1 do
-          begin
-            KanalSrv[2].RcvBuf[KanalSrv[2].RcvPtr] := KanalSrv[2].port.Buffer[j];
-            inc(KanalSrv[2].RcvPtr);
+        for j := 0 to i-1 do
+        begin
+          KanalSrv[2].RcvBuf[KanalSrv[2].RcvPtr] := KanalSrv[2].port.Buffer[j]; inc(KanalSrv[2].RcvPtr);
+        end;
+
+        if KanalSrv[2].RcvPtr > LnSoobSrv * 3 then
+        begin
+          inc(KanalSrv[2].cnterr); // увеличить счетчик ошибок канала
+          reportf('Переполнение входного буфера канала 1 ('+ IntToStr(KanalSrv[1].RcvPtr)+' байт) '+ DateTimeToStr(LastTime));
+          KanalSrv[2].RcvPtr := 0;
+        end else
+          ExtractSoobSrv(2); // распаковка данных из 2-го канала
+        if MyMarker[2] then
+        begin // выставить признак синхронизации по 2-му каналу
+          MySync[2] := true; MyMarker[2] := false; KanalSrv[2].issync := true; result := true;
+          WriteSoobCom(2); // выдать во 2-ой канал данные
+        end;
+      end;
+    end;
+
+    //
+    // Для обмена с сервером используется труба в дуплексном режиме.
+    //
+    1 : begin
+      if KanalSrv[1].active then
+      begin
+        case KanalSrv[1].State of
+          PIPE_READING_SUCCESS :
+          begin // прочитать данные из буфера трубы
+            if not FixedConnect then
+            begin // зафиксировать восстановление связи с сервером
+              AddFixMessage(GetShortMsg(1,434,''),5,0); InsArcNewMsg(0,434+$2000);
+            end;
+            FixedConnect := true; KanalSrv[1].iserror := false;
+            KanalSrv[1].rcvcnt := KanalSrv[1].RcvPtr;
+            if KanalSrv[1].rcvcnt > 0 then // прочитать данные из трубы
+            begin
+              if KanalSrv[1].rcvcnt > 70 then begin inc(KanalSrv[1].cnterr); end else KanalSrv[1].cnterr := 0;
+              KanalSrv[1].isrcv := true; MySync[1] := true;
+
+              if KanalSrv[1].RcvPtr > LnSoobSrv * 3 then
+              begin
+                inc(KanalSrv[1].cnterr); // увеличить счетчик ошибок канала
+                reportf('Переполнение входного буфера канала 1 ('+ IntToStr(KanalSrv[1].RcvPtr)+' байт) '+ DateTimeToStr(LastTime));
+                KanalSrv[1].RcvPtr := 0;
+              end else
+                ExtractSoobSrv(1); // распаковка данных из сервера
+            end;
+            KanalSrv[1].State := 0; // разрешить продолжение набора буфера из трубы
+            MySync[1] := true; MyMarker[1] := false; KanalSrv[1].issync := true;
           end;
-          if KanalSrv[2].RcvPtr > LnSoobSrv * 5 then
-          begin
-            inc(KanalSrv[2].cnterr); //--------- увеличить счетчик ошибок канала
-            reportf('Переполнение входного буфера канала 2 ('+ IntToStr(KanalSrv[2].RcvPtr)+' байт) '+ DateTimeToStr(LastTime));
-            KanalSrv[2].RcvPtr := 0;
-          end else
-            ExtractSoobSrv(2); //-------------- распаковка данных из 2-го канала
-          if MyMarker[2] then
-          begin //--------------- выставить признак синхронизации по 2-му каналу
-            MySync[2] := true;
-            MyMarker[2] := false;
-            KanalSrv[2].issync := true;
-            result := true;
-            WriteSoobCom(2); //--------------------- выдать во 2-ой канал данные
+
+          PIPE_ERROR_STATE :
+          begin // перерыв связи с сервером
+            KanalSrv[1].active := false;
           end;
-          fixch2 := false;
+        end;
+      end else
+      begin
+        KanalSrv[1].iserror := true; KanalSrv[2].iserror := true;
+        if FixedDisconnect then
+        begin
+          if FDT < LastTime then
+          begin
+            AddFixMessage(GetShortMsg(1,433,''),4,4); InsArcNewMsg(0,433+$1000); DisconnectKanalSrv(1);
+            ConnectKanalSrv(1); FixedDisconnect := false; FixedConnect := false;
+          end;
         end else
         begin
-          if fixch2 then
-          begin
-            if FDT2 < LastTime then
-            begin
-              DisconnectKanalSrv(2);
-              AddFixMessage(GetShortMsg(1,433,'по 2 каналу'),4,4);
-              InsArcNewMsg(0,433+$1000);
-              FixedDisconnect[2] := true;
-              FixedConnect[2] := false;
-            end;
-          end else
-          begin //------------------ фиксируем момент отсутствия данных в канале
-            fixch2 := true;
-            FDT2 := LastTime + 20/86400;
-          end;
-        end;
-      end else
-      begin
-        fixch2 := false;
-        if KanalSrv[2].Index > 0 then
-        begin // если не было завершения обслуживания канала - фиксировать обрыв связи с попыткой восстановления соединения через 30 сек.
-          KanalSrv[2].iserror := true;
-          if FixedDisconnect[2] then
-          begin
-            if FDT2 < LastTime then
-            begin
-              ConnectKanalSrv(2);
-              FixedDisconnect[2] := false;
-              FixedConnect[2] := false;
-            end;
-          end else
-          begin
-            FixedDisconnect[2] := true;
-            FDT2 := LastTime + 30/86400;
-          end;
+          FixedDisconnect := true; FDT := LastTime + 10/80000;
         end;
       end;
+      WriteSoobPipe;
     end;
-
-    // Технологическая функция - сохранить данные, полученные из канала
-    if savearc then SaveKanal;
-  except
-    on e: Exception do
-    begin
-      reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.SyncReady]');
-      result := false;
-      WindowsReBoot;
-    end;
-    end;
+  end;
 end;
 
 
 
 function GetFR5(param : Word) : Byte;
 begin
-try
   result := FR5[param];
   FR5[param] := 0; // очистить признаки
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.GetFR5]'); result := 0; WindowsReBoot; end;
-end;
 end;
 
 function GetFR3(const param : Word; var nep, ready : Boolean) : Boolean;
   var p,d : integer;
 begin
-try
   result := false;
   if param < 8 then exit;
   d := param and 7; // номер запрашиваемого бита
@@ -603,15 +543,11 @@ try
   else
     result := (FR3[p] and 1) = 1;
   end;
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.GetFR3]'); result := false; WindowsReBoot; end;
-end;
 end;
 
 function GetFR4State(param : Word) : Boolean;
   var p,d : integer;
 begin
-try
   result := false;
   if param < 8 then exit;
   d := param and 7;
@@ -634,9 +570,6 @@ try
     end;
   end else
     result := false;
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.GetFR4State]'); result := false; WindowsReBoot; end;
-end;
 end;
 
 //-----------------------------------------------------------------------------
@@ -645,10 +578,9 @@ end;
 // для СОМ-портов
 procedure WriteSoobCom(kanal : Byte);
   var next : boolean; crc : crc8_t; i,j,k : integer; a,b,bl,bh : byte;
-  w {$IFDEF RMDSP},wyr,wmt,wdy,whr,wmn,wsc,wmsc{$ENDIF} : word; {$IFDEF RMDSP}uts : TDateTime;{$ENDIF}
+  w,wyr,wmt,wdy,whr,wmn,wsc,wmsc : word; uts : TDateTime;
 begin
-try
-  if Assigned(KanalSrv[kanal].port) then
+  if KanalSrv[kanal].port <> nil then
   begin
     next := false;
     a := config.RMID; a := a shl 4; a := a + LastSrv[kanal]; // адресовать сообщение
@@ -663,7 +595,6 @@ try
     WrBuffer[j] := char(a); inc(j);
     WrBuffer[j] := char(b); inc(j);
 
-{$IFDEF RMDSP}
     if WorkMode.ServerSync then
     begin
       if SyncCmd then
@@ -695,20 +626,10 @@ try
       end;
     end;
 
-    if (CmdCnt > 0) and ((CmdBuff.Cmd = 96) or (CmdBuff.Cmd = 97) or (CmdBuff.Cmd = 125)) then
-    begin // Упаковка команды перезапуска сервера или УВК, восстановления интерфейса ОТУ
-      WrBuffer[j] := char(CmdBuff.Cmd); inc(j);
-      NewCmd[kanal] := NewCmd[kanal] + char(CmdBuff.Cmd);
-      bh := CmdBuff.Index div $100; bl := CmdBuff.Index - bh * $100;
-      WrBuffer[j] := char(bl); inc(j); NewCmd[kanal] := NewCmd[kanal] + char(bl);
-      WrBuffer[j] := char(bh); inc(j); NewCmd[kanal] := NewCmd[kanal] + char(bh);
-      CmdCnt := 0;
-    end;
-{$ENDIF}
 
     if not WorkMode.LockCmd then
     begin // передать команды в сервер если нет запрета ТУ
-{$IFDEF RMDSP}
+
       if WorkMode.MarhRdy then
       begin // Маршрутная команда от ДСП готова к передаче на сервер
         WorkMode.MarhRdy := false;
@@ -726,7 +647,7 @@ try
           + char(MarhTracert[1].MarhCmd[2]) + char(MarhTracert[1].MarhCmd[3]) + char(MarhTracert[1].MarhCmd[4]) + char(MarhTracert[1].MarhCmd[5])
           + char(MarhTracert[1].MarhCmd[6]) + char(MarhTracert[1].MarhCmd[7]) + char(MarhTracert[1].MarhCmd[8]) + char(MarhTracert[1].MarhCmd[9]);
       end;
-{$ENDIF}
+
       if CmdCnt > 0 then
       begin // Упаковка готовых команд
         WrBuffer[j] := char(CmdBuff.Cmd); inc(j);
@@ -830,42 +751,285 @@ try
 
     KanalSrv[kanal].port.BufToComm(@WrBuffer[0],j);
   end;
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.WriteSoobCom]'); WindowsReBoot; end;
-end;
 end;
 
-
-
-//-------------------------------------------- Процедуры цикла чтения из канала СОМ портов
-function ReadSoobCom(kanal: Byte; var rcv: string) : Integer;
-var
-	i : integer;
+// для трубы
+procedure WriteSoobPipe;
+  var next : boolean; crc : crc8_t; i,j,k : integer; a,b,bl,bh : byte;
+  w,wyr,wmt,wdy,whr,wmn,wsc,wmsc : word; uts : TDateTime; cErr : cardinal;
 begin
-	try
-		result := 0;
-		if Assigned(KanalSrv[kanal].port) then
-		begin
-			result := KanalSrv[kanal].port.BufFromComm(KanalSrv[kanal].port.Buffer,sizeof(KanalSrv[kanal].port.Buffer));
-			if savearc then
-			begin //----------------------- сохранить данные из канала - технологическая функция
-				rcv := ''; 
-				for i := 0 to result-1 do 
-				rcv := rcv + KanalSrv[kanal].port.Buffer[i];
-				case kanal of
-					1 : chnl1 := chnl1 + rcv;
-					2 : chnl2 := chnl2 + rcv;
-				end;
-			end;
-		end;
-	except
-		on e: Exception do 
-		begin 
-			reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.ReadSoobCom]'); 
-			result := 0; 
-			WindowsReBoot; 
-		end;
-	end;
+  if (KanalSrv[1].nPipe <> '') and KanalSrv[1].active then
+  begin
+    KanalSrv[2].iserror := false;
+    KanalSrv[2].cnterr := 0;
+    MySync[2] := false;
+    if not (SyncCmd or (DoubleCnt > 0) or WorkMode.MarhRdy or (Cmdcnt > 0) or (DoubleCnt > 0) or (LastCRC[1] > 0)) then
+      exit;
+    MySync[2] := true;
+    next := false;
+    a := config.RMID; a := a shl 4; a := a + LastSrv[1]; // адресовать сообщение
+    // формирование кода состояния
+    b := config.ru; // район управления
+    if WorkMode.PushOK then b := b + $20;
+    if not WorkMode.OKError then b := b + $40;
+    if WorkMode.PushRU then b := b + $80;
+
+    j := 0;
+    WrBuffer[j] := #$AA; inc(j);
+    WrBuffer[j] := char(a); inc(j);
+    WrBuffer[j] := char(b); inc(j);
+
+    if WorkMode.ServerSync then
+    begin
+      if SyncCmd then
+      begin // выдать команду синхронизации времени на серверах
+        DoubleCnt := 0; SyncCmd := false; SyncTime := false;
+        uts := Date + Time; DecodeTime(uts,whr,wmn,wsc,wmsc); DecodeDate(uts,wyr,wmt,wdy);
+        WrBuffer[j] := char(cmdfr3_autodatetime); inc(j); NewCmd[1] := NewCmd[1] + char(cmdfr3_autodatetime);
+        w := wSc and $ff; WrBuffer[j] := char(w); inc(j); NewCmd[1] := NewCmd[1] + char(w);
+        w := wMn and $ff; WrBuffer[j] := char(w); inc(j); NewCmd[1] := NewCmd[1] + char(w);
+        w := wHr and $ff; WrBuffer[j] := char(w); inc(j); NewCmd[1] := NewCmd[1] + char(w);
+        w := wDy and $ff; WrBuffer[j] := char(w); inc(j); NewCmd[1] := NewCmd[1] + char(w);
+        w := wMt and $ff; WrBuffer[j] := char(w); inc(j); NewCmd[1] := NewCmd[1] + char(w);
+        w := wYr - 2000;  WrBuffer[j] := char(w); inc(j); NewCmd[1] := NewCmd[1] + char(w);
+        WrBuffer[j] := char(0); inc(j); NewCmd[1] := NewCmd[1] + char(0);
+        WrBuffer[j] := char(0); inc(j); NewCmd[1] := NewCmd[1] + char(0);
+      end else
+      if (DoubleCnt > 0) and (ParamDouble.Cmd = cmdfr3_newdatetime) then
+      begin // Упаковка времени
+        DoubleCnt := 0;
+        WrBuffer[j] := char(ParamDouble.Cmd); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Cmd);
+        WrBuffer[j] := char(ParamDouble.Index[1]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[1]);
+        WrBuffer[j] := char(ParamDouble.Index[2]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[2]);
+        WrBuffer[j] := char(ParamDouble.Index[3]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[3]);
+        WrBuffer[j] := char(ParamDouble.Index[4]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[4]);
+        WrBuffer[j] := char(ParamDouble.Index[5]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[5]);
+        WrBuffer[j] := char(ParamDouble.Index[6]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[6]);
+        WrBuffer[j] := char(ParamDouble.Index[7]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[7]);
+        WrBuffer[j] := char(ParamDouble.Index[8]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[8]);
+      end;
+    end;
+
+    if not WorkMode.LockCmd then
+    begin // передать команды в сервер если нет запрета ТУ
+
+      if WorkMode.MarhRdy then
+      begin // Маршрутная команда от ДСП готова к передаче на сервер
+        WorkMode.MarhRdy := false;
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[10]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[1]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[2]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[3]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[4]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[5]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[6]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[7]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[8]); inc(j);
+        WrBuffer[j] := char(MarhTracert[1].MarhCmd[9]); inc(j);
+        NewCmd[1] := NewCmd[1] + char(MarhTracert[1].MarhCmd[10]) + char(MarhTracert[1].MarhCmd[1])
+          + char(MarhTracert[1].MarhCmd[2]) + char(MarhTracert[1].MarhCmd[3]) + char(MarhTracert[1].MarhCmd[4]) + char(MarhTracert[1].MarhCmd[5])
+          + char(MarhTracert[1].MarhCmd[6]) + char(MarhTracert[1].MarhCmd[7]) + char(MarhTracert[1].MarhCmd[8]) + char(MarhTracert[1].MarhCmd[9]);
+      end;
+
+      if CmdCnt > 0 then
+      begin // Упаковка готовых команд
+        WrBuffer[j] := char(CmdBuff.Cmd); inc(j);
+        NewCmd[1] := NewCmd[1] + char(CmdBuff.Cmd);
+        bh := CmdBuff.Index div $100; bl := CmdBuff.Index - bh * $100;
+        WrBuffer[j] := char(bl); inc(j); NewCmd[1] := NewCmd[1] + char(bl);
+        WrBuffer[j] := char(bh); inc(j); NewCmd[1] := NewCmd[1] + char(bh);
+        CmdCnt := 0;
+      end;
+
+      if DoubleCnt > 0 then
+      begin // Упаковка параметров Double
+        DoubleCnt := 0;
+        WrBuffer[j] := char(ParamDouble.Cmd); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Cmd);
+        WrBuffer[j] := char(ParamDouble.Index[1]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[1]);
+        WrBuffer[j] := char(ParamDouble.Index[2]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[2]);
+        WrBuffer[j] := char(ParamDouble.Index[3]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[3]);
+        WrBuffer[j] := char(ParamDouble.Index[4]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[4]);
+        WrBuffer[j] := char(ParamDouble.Index[5]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[5]);
+        WrBuffer[j] := char(ParamDouble.Index[6]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[6]);
+        WrBuffer[j] := char(ParamDouble.Index[7]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[7]);
+        WrBuffer[j] := char(ParamDouble.Index[8]); inc(j); NewCmd[1] := NewCmd[1] + char(ParamDouble.Index[8]);
+      end;
+    end else
+    begin // сбросить все накопленные команды если есть блокировка ТУ
+      DoubleCnt := 0; Cmdcnt := 0; WorkMode.MarhRdy := false;
+    end;
+
+    if LastCRC[1] > 0 then
+    begin // Упаковка квитанций
+      if j < 25 then
+      begin
+        k := LastCRC[1];
+        if (2 * k) > (25 - j) then
+        begin
+          k := (25 - j) div 2; // определить кол-во отсылаемых квитанций
+          next := true;        // поставить признак продолжения ТУ
+        end;
+        WrBuffer[j] := char(k + cmdfr3_kvitancija); inc(j);
+        while k > 0 do
+        begin
+          SendCheck(1,w);
+
+//          trmkvit := trmkvit + ',' + IntToStr(w)+ ':'+ IntToStr(kanal);
+
+          b := w div $100;
+          WrBuffer[j] := char(w - (b * $100)); inc(j);
+          WrBuffer[j] := char(b); inc(j);
+          dec(k);
+        end;
+      end;
+    end;
+
+    while j < 26 do
+    begin
+      WrBuffer[j] := #0; inc(j);
+    end; // дополнить сообщение до заданной длины
+
+    crc := CalculateCRC8(@WrBuffer[1],25);
+    WrBuffer[j] := char(crc); inc(j);
+    WrBuffer[j] := #$55; inc(j);
+
+    i := 0;
+    while next do
+    begin // дослать оставшиеся квитанции отдельным кадром
+      i := i+28; j := 0;
+      WrBuffer[i+j] := #$AA; inc(j);
+      WrBuffer[i+j] := char(a); inc(j);
+      WrBuffer[i+j] := char(b); inc(j);
+      if LastCRC[1] > 0 then
+      begin // Упаковка квитанций
+        if j < 25 then
+        begin
+          k := LastCRC[1];
+          if (2 * k) > (25 - j) then
+          begin
+            k := (25 - j) div 2; // определить кол-во отсылаемых квитанций
+            next := true;        // поставить признак продолжения ТУ
+          end else
+            next := false;
+          WrBuffer[i+j] := char(k + 224);
+          while k > 0 do
+          begin
+            SendCheck(1,w);
+            b := w div $100;
+            WrBuffer[i+j] := char(w - (b * $100)); inc(j);
+            WrBuffer[i+j] := char(b); inc(j);
+            dec(k);
+          end;
+        end;
+      end;
+      while j < 26 do
+      begin
+        WrBuffer[i+j] := #0; inc(j);
+      end; // дополнить сообщение до заданной длины
+      crc := CalculateCRC8(@WrBuffer[i+1],25);
+      WrBuffer[i+j] := char(crc); inc(j);
+      WrBuffer[i+j] := #$55; inc(j);
+    end;
+
+    if j > 0 then
+    begin // Копировать данные в буфер
+      if not WriteFile( KanalSrv[1].hPipe, WrBuffer, j, lpNBWri, @TrmOLS) then
+      begin
+        cErr := GetLastError;
+        case cErr of
+          ERROR_PIPE_NOT_CONNECTED : begin
+            KanalSrv[2].iserror := true;
+          end;
+          ERROR_IO_PENDING : begin
+            KanalSrv[2].iserror := false;
+          end;
+        end;
+        MySync[1] := true; KanalSrv[1].issync := true;
+      end else
+        KanalSrv[2].iserror := false;
+    end;
+  end;
+end;
+
+//-----------------------------------------------------------------------------
+// Процедуры цикла чтения из канала
+
+// Для СОМ портов
+function ReadSoobCom(kanal: Byte; var rcv: string) : Integer;
+begin
+  result := 0;
+  if KanalSrv[kanal].port <> nil then
+  begin
+    result := KanalSrv[kanal].port.BufFromComm(KanalSrv[kanal].port.Buffer,sizeof(KanalSrv[kanal].port.Buffer));
+
+    if savearc then
+    begin // сохранить данные из канала - технологическая функция
+
+      if kanal = 1 then chnl1 := chnl1 + rcv else
+      if kanal = 2 then chnl2 := chnl2 + rcv;
+    end;
+  end;
+end;
+
+// Для трубы - чтение канала
+function ReadSoobPipe(var RdBuf: Pointer) : DWORD;
+  var i : integer; cbRd,cbTRd : cardinal; LastError : DWORD;
+begin
+  LastError := 0;
+  while true do
+  begin
+    if KanalSrv[1].hPipe = INVALID_HANDLE_VALUE then
+    begin
+      KanalSrv[1].iserror := true; break;
+    end;
+    case KanalSrv[1].State of
+      PIPE_ERROR_STATE : break; // выход если ошибка подключения к серверу
+      PIPE_EXIT : begin
+        ExitThread(0); result := 0; exit; // завершить обслуживание потока трубы
+      end;
+    else // чтение из трубы
+      if GetNamedPipeHandleState(KanalSrv[1].hPipe,nil,nil,nil,nil,nil,0) then
+      begin
+        if not ReadFile( KanalSrv[1].hPipe, Buffer, 70, cbRd, @RcvOLS) then
+        begin // Завершение с ошибкой
+          LastError := GetLastError;
+          if LastError = ERROR_IO_PENDING then
+          begin // ждать прием символов из трубы
+            WaitForSingleObject(RcvOLS.hEvent, 299);
+            CancelIO(KanalSrv[1].hPipe);
+          end else
+          begin // выход из обработки трубы
+            KanalSrv[1].iserror := true; break;
+          end;
+        end;
+        GetOverlappedResult(KanalSrv[1].hPipe,RcvOLS,cbTRd,false);
+        if cbTRd > 0 then
+        begin
+          if (KanalSrv[1].RcvPtr + cbTRd) < RCV_LIMIT then
+          begin // копировать в буфер
+            for i := 0 to cbTRd-1 do
+            begin
+              KanalSrv[1].RcvBuf[KanalSrv[1].RcvPtr] := Buffer[i]; inc(KanalSrv[1].RcvPtr);
+
+if savearc then
+begin // сохранить данные из канала - технологическая функция
+  chnl1 := chnl1 + Buffer[i];
+end;
+
+            end;
+            KanalSrv[1].State := PIPE_READING_SUCCESS;
+          end else KanalSrv[1].iserror := true;
+        end;
+      end else
+      begin // остановить канал если обнаружена ошибка статуса канала
+        KanalSrv[1].iserror := true; break;
+      end;
+    end;
+  end;
+  reportf('Код ошибки трубы '+ IntToStr(LastError));
+  KanalSrv[1].State := PIPE_ERROR_STATE;
+  ExitThread(99); // завершить обслуживание потока трубы по ошибке
+  result := 0;
 end;
 
 //------------------------------------------------------------------------------
@@ -873,7 +1037,6 @@ end;
 function SaveArch(const c: byte) : Boolean;
   var i,hfile, hnbw, len: cardinal; bll,blh,bhl,bhh : byte; fp: longword; dt : Double; idt,cidt : int64;
 begin
-try
   DateTimeToString(stime, 'yymmdd', Date);
   if stime = ArchName then inc(ArcIndex) else begin ArcIndex := 0; ArchName := stime; end;
   sz := config.arcpath+ '\'+ ArchName+ '.ard';
@@ -1064,6 +1227,7 @@ try
   begin
     reportf('Ошибка '+ IntToStr(GetLastError)+ ' при перемещении указателя в конец файла архива.'); result := false;
   end;
+//  if not FlushFileBuffers(hfile) then begin ShowMessage('Ошибка '+ IntToStr(GetLastError)+ ' во время записи файла архива на жесткий диск.'); result := false; end;
   finally
     if not CloseHandle(hfile) then begin reportf('Ошибка '+ IntToStr(GetLastError)+' закрытия файла архива.'); result := false; end;
     case c of
@@ -1075,39 +1239,21 @@ try
 
     end;
   end;
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.SaveArc]'); result := false; WindowsReBoot; end;
-end;
 end;
 
-//------------------------------------------------------------ Добавить квитанцию в список
+//------------------------------------------------------------------------------
+// Добавить квитанцию в список
 function AddCheck(kanal : Byte; crc : Word) : Boolean;
-var 
-	i : integer;
+  var i : integer;
 begin
-	try
-		if LastCRC[kanal] < High(BackCRC) then
-		begin
-			inc(LastCRC[kanal]); 
-			BackCRC[LastCRC[kanal],kanal] := crc; 
-			result := true;
-		end else
-		begin
-			for i := 1 to High(BackCRC)-1 do 
-			begin 
-				BackCRC[i,kanal] := BackCRC[i+1,kanal]; 
-			end;
-			BackCRC[LastCRC[kanal],kanal] := crc; 
-			result := false;
-		end;
-	except
-		on e: Exception do 
-		begin 
-			reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.AddCheck]'); 
-			result := false; 
-			WindowsReBoot; 
-		end;
-	end;
+  if LastCRC[kanal] < High(BackCRC) then
+  begin
+    inc(LastCRC[kanal]); BackCRC[LastCRC[kanal],kanal]  := crc; result := true;
+  end else
+  begin
+    for i := 1 to High(BackCRC)-1 do begin BackCRC[i,kanal] := BackCRC[i+1,kanal]; end;
+    BackCRC[LastCRC[kanal],kanal] := crc; result := false;
+  end;
 end;
 
 //-----------------------------------------------------------------------------
@@ -1115,7 +1261,6 @@ end;
 function SendCheck(kanal : Byte; var crc : Word) : Boolean;
   var i : integer;
 begin
-try
   result := false;
   if LastCRC[kanal] > 0 then
   begin
@@ -1124,154 +1269,119 @@ try
     dec(LastCRC[kanal]);
     result := true;
   end;
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.SSecdCheck]'); result := false; WindowsReBoot; end;
-end;
 end;
 
-var
-  stmp : string;
-  errch : array[1..2] of integer;
-  errfix : array[1..2] of Boolean;
-
-//-------------------------------------------------------- распаковка сообщений от сервера
-procedure ExtractSoobSrv(kanal : Byte); 
-var
-	pb         : char; 
-	i,j,l      : integer; 
-	dc         : cardinal; 
-	i64        : int64;
-  b,bl,bh,mm : byte; 
-	w,ww,dw    : word; 
-	crc,pcrc   : crc16_t;
+//------------------------------------------------------------------------------
+// распаковка сообщений от сервера
+procedure ExtractSoobSrv(kanal : Byte); // распаковка сообщений из сервера
+  var
+    pb : char; i,j,l : integer; dc : cardinal; i64 : int64;
+    b,bl,bh,mm : byte; w,ww,dw : word; crc,pcrc : crc16_t;
   label  loop;
+
 begin
-	try
-		if (kanal < 1) or (kanal > 2) then exit;
-		
+  KanalSrv[kanal].RcvPtr := 80;
+
+  if (kanal < 1) or (kanal > 2) then exit;
 loop:
-  if KanalSrv[kanal].RcvPtr < LnSoobSrv then exit; //---------------- мало данных в буфере
+
+  if KanalSrv[kanal].RcvPtr < LnSoobSrv then exit; // мало данных в буфере
   i := 0;
-  while i < KanalSrv[kanal].RcvPtr do 
-	begin 
-		if KanalSrv[kanal].RcvBuf[i] = #$AA then break; //- найти байт "признак начала" пакета
-		inc(i); 
-	end; 
-  
-	if (i > 0) and (i < KanalSrv[kanal].RcvPtr) then
-  begin //--------------------------------- обрезать начало буфера до символа начала кадра
+  while i < KanalSrv[kanal].RcvPtr do
+  begin
+    if KanalSrv[kanal].RcvBuf[i] = #$AA then break;
+    inc(i);
+  end; // найти байт с признаком начала пакета
+
+  if (i > 0) and (i < KanalSrv[kanal].RcvPtr) then
+  begin // обрезать начало буфера до символа начала кадра
     l := 0;
-    while i < KanalSrv[kanal].RcvPtr do 
-		begin 
-			KanalSrv[kanal].RcvBuf[l] := KanalSrv[kanal].RcvBuf[i]; 
-			inc(i); 
-			inc(l); 
-		end;
+    while i < KanalSrv[kanal].RcvPtr do
+    begin
+      KanalSrv[kanal].RcvBuf[l] := KanalSrv[kanal].RcvBuf[i];
+      inc(i); inc(l);
+    end;
     KanalSrv[kanal].RcvPtr := l;
   end;
-  
-	if KanalSrv[kanal].RcvPtr < LnSoobSrv then exit; //--- длина строки мала - копить дальше
+  if KanalSrv[kanal].RcvPtr < LnSoobSrv then exit; // длина строки мала - копить дальше
 
-  if KanalSrv[kanal].RcvBuf[LnSoobSrv-1] = #$55 then //----- признак конца пакета на месте 
-  begin  //--------------------------------------------------- вычислить контрольную сумму
-    w := byte(KanalSrv[kanal].RcvBuf[LnSoobSrv-3]) + 
-		byte(KanalSrv[kanal].RcvBuf[LnSoobSrv-2]) * 256; 
-		
-		pcrc := crc16_t(w); //---------------------------------------------- к.с. из сообщения
-    
-		crc := CalculateCRC16(@KanalSrv[kanal].RcvBuf[1],LnSoobSrv-4); //- пересчет для буфера
-    
-		if crc = pcrc then //----------- проверки достоверности выполнены - распаковать данные
-    begin  
-      errfix[kanal] := false;
-      KanalSrv[kanal].cnterr := 0; //------------------------------- сброс счетчика ошибок
+  if KanalSrv[kanal].RcvBuf[LnSoobSrv-1] = #$55 then // если признак конца пакета на месте - вычислить контрольную сумму
+  begin
+    w := byte(KanalSrv[kanal].RcvBuf[LnSoobSrv-3]) + byte(KanalSrv[kanal].RcvBuf[LnSoobSrv-2]) * 256; pcrc := crc16_t(w); // к.с. из сообщения
+    crc := CalculateCRC16(@KanalSrv[kanal].RcvBuf[1],LnSoobSrv-4); // к.с. из буфера
+
+    if crc = pcrc then
+    begin  // проверки достоверности выполнены - распаковать данные (t - содержимое кадра)
+      KanalSrv[kanal].cnterr := 0; // сброс счетчика ошибок
       KanalSrv[kanal].iserror := false;
 
-      LastTime := Date+Time;
-      inc(KanalSrv[kanal].pktcnt); //------------------ увеличить счетчик принятых пакетов
+//      rcvkvit := rcvkvit + ',' + IntToStr(crc)+ ':'+ IntToStr(kanal);
 
-      if not AddCheck(kanal,crc) then //---- при записи CRC в список квитанций была потеря
+      if not AddCheck(kanal,crc) then
       begin
-        inc(KanalSrv[kanal].cnterr); //-------------------------- увеличить счетчик ошибок
-        inc(KanalSrv[kanal].chklost); //------- увеличить счетчик неотправленных квитанций
+        inc(KanalSrv[kanal].cnterr); // увеличить счетчик по превышению кол-ва неотправленных квитанций
       end;
-			
-      j := 1; //--------------------------------------------------------- начало сообщения
+      j := 1; // начало сообщения
       b := byte(KanalSrv[kanal].RcvBuf[j]);
-      mm := b and $0f; //------------------------------------------------- выделить маркер
-  
-			if (config.RMID = mm) and (LastTime - LastRcv < AnsverTimeOut) then
-      begin
-        MyMarker[kanal] := true; //------------------ установка признака получения маркера
-      end else
-        MyMarker[kanal] := false; //--------------------- запрет захвата канала дсп-сервер
-      
-			LastRcv := Date+Time; //------------ сохранить время приема последнего полного кадра
-      
-			
-      SrvState:=0; b:=b and $f0; SrvState := b; //-- выделить номер запрашивающего сервера	
-			b:=b shr 4; LastSrv[kanal] := b; //------- Получить номер активного сервера в канале
+      mm := b and $0f; // выделить маркер
+      if (config.RMID = mm) and (LastTime - LastRcv < AnsverTimeOut) then
+        MyMarker[kanal] := true // установка признака получения маркера
+      else
+        MyMarker[kanal] := false; // запрет захвата канала дсп-сервер
+      LastRcv := LastTime; // сохранить время приема последнего полного кадра
+      // выделить номер запрашивающего сервера
+      SrvState := 0;
+      b := b and $f0; SrvState := b; b := b shr 4; LastSrv[kanal] := b; // Получить номер активного сервера в канале
       inc(j);
-{$IFDEF RMDSP}
-			if config.RMID = mm then
-{$ENDIF}       
-			StateRU := byte(KanalSrv[kanal].RcvBuf[j]); // состояние из сервера если свой маркер
-      
-			WorkMode.LockCmd := ((StateRU and $10) = 0);
-      
-			SrvState := SrvState or (StateRU and 7); 
-			
-			if WorkMode.LockCmd then SrvState := SrvState or 8;
-			
-      if char(SrvState) <> FR3inp[WorkMode.ServerStateSoob] then //новое состояние сервера
-      begin //-------------------------- Сохранить новое значение байта состояния серверов
-        bl := WorkMode.ServerStateSoob and $ff; 
-				bh := (WorkMode.ServerStateSoob and $ff00) shr 8;
+      if config.RMID = mm then StateRU := byte(KanalSrv[kanal].RcvBuf[j]); // состояние из сервера если свой маркер
+      WorkMode.LockCmd := ((StateRU and $10) = 0);
+      SrvState := SrvState or (StateRU and 7); if WorkMode.LockCmd then SrvState := SrvState or 8;
+      if char(SrvState) <> FR3inp[WorkMode.ServerStateSoob] then
+      begin // Сохранить новое значение байта состояния серверов
+        bl := WorkMode.ServerStateSoob and $ff; bh := (WorkMode.ServerStateSoob and $ff00) shr 8;
         NewFR[kanal] := NewFR[kanal] + char(bl) + char(bh) + char(SrvState);
-        FR3inp[WorkMode.ServerStateSoob] := char(SrvState);//---- запомнить байт состояния
+        FR3inp[WorkMode.ServerStateSoob] := char(SrvState);
       end;
 
-      DirState[1] := (StateRU and $f0)+(config.ru and $0f);//получить состояние управления
+      DirState[1] := (StateRU and $f0)+(config.ru and $0f); // получить байт состояния управления
       FR3inp[WorkMode.DirectStateSoob] := char(DirState[1]);
-      
-			if WorkMode.Upravlenie <> ((StateRU and $80) = $80) then
-      begin //--------------------------------------- Инициировать смену режима управления
-        bl := WorkMode.DirectStateSoob and $ff;
-				bh := (WorkMode.DirectStateSoob and $ff00) shr 8;
+      if WorkMode.Upravlenie <> ((StateRU and $80) = $80) then
+      begin // Инициировать смену режима управления
+        bl := WorkMode.DirectStateSoob and $ff; bh := (WorkMode.DirectStateSoob and $ff00) shr 8;
         NewFR[kanal] := NewFR[kanal] + char(bl) + char(bh) + char(DirState[1]);
-        StDirect := (StateRU and $80) = $80; 
-				ChDirect := true;
+        StDirect := (StateRU and $80) = $80; ChDirect := true;
       end;
       WorkMode.PushRU := (StateRU and $80) = $80;
       inc(j);
-      inc(j); //------------------------------------------------ пропустить резервный байт
-      
-      while j < LnSoobSrv-3 do //-------------------------------------------- данные кадра
+
+      inc(j); // пропустить резервный байт
+      // данные кадра
+      while j < LnSoobSrv-3 do
       begin
-        bl := byte(KanalSrv[kanal].RcvBuf[j]); 
-				inc(j); if j > LnSoobSrv-4 then break;
+        bl := byte(KanalSrv[kanal].RcvBuf[j]);
+        inc(j);
+        if j > LnSoobSrv-4 then break;
         bh := byte(KanalSrv[kanal].RcvBuf[j]);
-       
-				w := bh * 256 + bl; //------------------------------------------ адресный параметр
-        inc(j);  if j > LnSoobSrv-4 then break;
-        pb := KanalSrv[kanal].RcvBuf[j];    //----------------------------- значение байта 
+        w := bh * 256 + bl; // параметр
+        inc(j);
+        if j > LnSoobSrv-4 then break;
+        pb := KanalSrv[kanal].RcvBuf[j];    // значение параметра (байт)
         inc(j);
 
         if w <> 0 then
         begin
           b := byte(pb);
           if w = WorkMode.DirectStateSoob then
-          begin //------------------------------ подтверждение сервера на изменение района
+          begin // подтверждение сервера на изменение района
             if config.RMID = mm then
             begin
               if not WorkMode.Upravlenie then
               begin
                 if (b and $0f) > 0 then
-                begin 
-                  if config.ru <> (b and $0f) then //-------------- новый район управления
-                  begin
-                    ChRegion := true;  
-                    NewRegion := (b and $0f);  //------------------------ район управления
+                begin // новый район управления
+                  if config.ru <> (b and $0f) then
+                  begin // район управления
+                    ChRegion := true; NewRegion := (b and $0f);
                   end;
                 end;
               end;
@@ -1383,34 +1493,6 @@ loop:
                 NewFR[kanal] := NewFR[kanal] + char(bl) + char(bh) + pb;
               end;
             end;
-          end else
-          begin
-          // если обнаружены неизвестные данные - сбросить хвост буфера и установить признак ошибки
-            LastTime := date+time;
-            inc(KanalSrv[kanal].pktlost); // увеличить счетчик искаженных данных в пакете
-            inc(errch[kanal]); errfix[kanal] := true; stmp := '';
-            for l := 0 to LnSoobSrv-1 do
-            stmp := stmp + KanalSrv[kanal].RcvBuf[l];
-            SaveDUMP(stmp,config.arcpath+ '\kanal'+IntToStr(kanal)+'.dmp');
-            KanalSrv[kanal].iserror := true;
-            MsgStateRM := 'Искажение данных в канале' + IntToStr(kanal);
-            MsgStateClr := 1;
-            //----------------------- Увеличить счетчик ошибок формата сообщения
-            if (errch[kanal] > 30) and not LockTablo then
-            begin
-               //---------------------------------- Попытаться остановить сервер
-              SendCommandToSrv(WorkMode.DirectStateSoob,cmdfr3_logoff,0);
-              LockTablo := true;
-              KanalSrv[kanal].active := false;
-              reportf('Счетчик ошибок формата данных превысил 30, DUMP записан в файл '+ config.arcpath+ '\kanal'+IntToStr(kanal));
-              FixStatKanal(1);
-              FixStatKanal(2);
-              Beep;
-              ShowWindow(Application.Handle,SW_SHOW);
-              ShowMessage('Счетчик ошибок формата данных превысил 30. Протокол записан в файл "DSP.RPT". Работа программы будет завершена.');
-              Application.Terminate;
-            end;
-            break;
           end;
 
         end;
@@ -1418,25 +1500,19 @@ loop:
       // выкинуть из строки обработанный кадр
       if KanalSrv[kanal].RcvPtr > LnSoobSrv then
       begin
-        if not errfix[kanal] then 
-				errch[kanal] := 0; // сброс ошибки данных, если не зафиксирован неизвестный формат
-        l := 0; 
-				i := LnSoobSrv;
+        l := 0; i := LnSoobSrv;
         while i < KanalSrv[kanal].RcvPtr do
         begin
-          KanalSrv[kanal].RcvBuf[l] := KanalSrv[kanal].RcvBuf[i]; 
-					inc(i); 
-					inc(l);
+          KanalSrv[kanal].RcvBuf[l] := KanalSrv[kanal].RcvBuf[i]; inc(i); inc(l);
         end;
         KanalSrv[kanal].RcvPtr := l;
       end else
       begin
-        KanalSrv[kanal].RcvPtr := 0; 
-				exit;
-      end; //--------------------------------- завершить если списан последний полный кадр
+        KanalSrv[kanal].RcvPtr := 0; exit;
+      end; // завершить если списан последний полный кадр
       goto loop;
     end else
-    begin //--------------- контрольная сумма неверна - продолжить поиск в исходной строке
+    begin // контрольная сумма неверна - продолжить поиск в исходной строке
       l := 0; i := 1;
       while i < KanalSrv[kanal].RcvPtr do
       begin
@@ -1444,36 +1520,14 @@ loop:
       end;
       KanalSrv[kanal].RcvPtr := l; goto loop;
     end;
-	end else
-	begin //----------- признак конца кадра не найден - продолжить поиск в исходной строке
-		l := 0; i := 1;
-		while i < KanalSrv[kanal].RcvPtr do
-		begin
-			KanalSrv[kanal].RcvBuf[l] := KanalSrv[kanal].RcvBuf[i]; 
-			inc(i); inc(l);
-		end;
-		KanalSrv[kanal].RcvPtr := l; 
-		goto loop;
-	end;
-	except
-		on e: Exception do 
-		begin 
-			reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.ExtractSoobSrv]'); 
-			WindowsReBoot; 
-		end;
-	end;
-end;
-
-
-//----------------------------------- Сохранить в файле протокола статистику работы канала
-procedure FixStatKanal(kanal : byte);
-begin
-  if Assigned(KanalSrv[kanal].port) then
-  begin
-    reportf('Канал '+IntToStr(kanal)+': Байт принято '+IntToStr(KanalSrv[kanal].rcvcnt));
-    reportf('Канал '+IntToStr(kanal)+': Пакетов принято '+IntToStr(KanalSrv[kanal].pktcnt));
-    reportf('Канал '+IntToStr(kanal)+': Пакетов искажено '+IntToStr(KanalSrv[kanal].pktlost));
-    reportf('Канал '+IntToStr(kanal)+': Квитанций отброшено '+IntToStr(KanalSrv[kanal].chklost));
+  end else
+  begin // признак конца кадра не найден - продолжить поиск в исходной строке
+    l := 0; i := 1;
+    while i < KanalSrv[kanal].RcvPtr do
+    begin
+      KanalSrv[kanal].RcvBuf[l] := KanalSrv[kanal].RcvBuf[i]; inc(i); inc(l);
+    end;
+    KanalSrv[kanal].RcvPtr := l; goto loop;
   end;
 end;
 
@@ -1483,9 +1537,6 @@ end;
 procedure KvitancijaFromSrv(Obj : Word; Kvit : Byte);
   var i,im : integer;
 begin
-try
-{$IFDEF RMSHN} WorkMode.CmdReady := false;{$ENDIF}
-
   if Obj > Word(WorkMode.LimitFR) then
   begin
     reportf('Получена квитанция на несуществующий объект с индексом '+ IntToStr(Obj)); exit;
@@ -1494,35 +1545,23 @@ try
   case Kvit of
     0 : begin // Успешное исполнение раздельной команды
       WorkMode.CmdReady := false; // разблокировать прием команды от оператора
-      InsArcNewMsg(0,$400);
     end;
     1 : begin // сообщение о выполнении маршрутной команды
       WorkMode.CmdReady := false; // разблокировать прием команды от оператора
-      im := 0;// поиск индекса маршрута по номеру FR3
-      for i := 1 to WorkMode.LimitObjZav do
-        if ObjZav[i].TypeObj = 5 then
-        begin
-          if ObjZav[i].ObjConstI[3] > 0 then
-            if Obj = (ObjZav[i].ObjConstI[3] div 8) then begin im := i; break; end;
-          if ObjZav[i].ObjConstI[5] > 0 then
-            if Obj = (ObjZav[i].ObjConstI[5] div 8) then begin im := i; break; end;
-        end;
-      if im > 0 then
-        if ObjZav[im].RU = config.ru then
-        begin MsgStateRM := GetShortMsg(2,1,ObjZav[im].Liter); MsgStateClr := 2; end;
-      InsArcNewMsg(im,1+$400);
+      if Obj <> WorkMode.DirectStateSoob then
+      begin
+        MsgStateRM := GetShortMsg(2,Kvit,LastMsgToDSP); MsgStateClr := 2;
+      end;
     end;
     2 : begin // Сообщение об отказе от выполнения команды раздельного управления
       WorkMode.CmdReady := false; // разблокировать прием команды от оператора
-{$IFDEF RMDSP}
-      if CmdBuff.LastObj = Obj then
+      if (CmdBuff.LastObj > 0) and (CmdBuff.LastObj <= word(WorkMode.LimitObjZav)) then
       begin
         MsgStateRM := GetShortMsg(2,2,ObjZav[CmdBuff.LastObj].Liter); MsgStateClr := 1;
-        InsArcNewMsg(0,2+$400);
+      end else
+      begin
+        MsgStateRM := GetShortMsg(2,2,' FR['+IntToStr(Obj)+ ']'); MsgStateClr := 1;
       end;
-{$ELSE}
-        InsArcNewMsg(0,2+$400);
-{$ENDIF}
     end;
     3 : begin // отказ от выполнения маршрутной команды
       WorkMode.CmdReady := false; // разблокировать прием команды от оператора
@@ -1536,9 +1575,12 @@ try
             if Obj = (ObjZav[i].ObjConstI[5] div 8) then begin im := i; break; end;
         end;
       if im > 0 then
-        if ObjZav[im].RU = config.ru then
-        begin MsgStateRM := GetShortMsg(2,3,ObjZav[im].Liter); MsgStateClr := 1; end;
-      InsArcNewMsg(im,3+$400);
+      begin
+        MsgStateRM := GetShortMsg(2,3,ObjZav[im].Liter); MsgStateClr := 1;
+      end else
+      begin
+        MsgStateRM := GetShortMsg(2,3,' FR['+IntToStr(Obj)+ ']'); MsgStateClr := 1;
+      end;
     end;
     4 : begin // сообщение о выполнении команды передачи на маневры
       WorkMode.CmdReady := false; // разблокировать прием команды от оператора
@@ -1552,9 +1594,12 @@ try
             if Obj = (ObjZav[i].ObjConstI[8] div 8) then begin im := i; break; end;
         end;
       if im > 0 then
-        if ObjZav[im].RU = config.ru then
-        begin MsgStateRM := GetShortMsg(2,4,ObjZav[im].Liter); MsgStateClr := 2; end;
-      InsArcNewMsg(im,4+$400);
+      begin
+        MsgStateRM := GetShortMsg(2,4,ObjZav[im].Liter); MsgStateClr := 2;
+      end else
+      begin
+        MsgStateRM := GetShortMsg(2,4,' FR['+IntToStr(Obj)+ ']'); MsgStateClr := 1;
+      end;
     end;
     5 : begin // отказ от выполнения команды передачи на маневры
       WorkMode.CmdReady := false; // разблокировать прием команды от оператора
@@ -1568,14 +1613,17 @@ try
             if Obj = (ObjZav[i].ObjConstI[8] div 8) then begin im := i; break; end;
         end;
       if im > 0 then
-        if ObjZav[im].RU = config.ru then
-        begin MsgStateRM := GetShortMsg(2,5,ObjZav[im].Liter); MsgStateClr := 1; end;
-      InsArcNewMsg(im,5+$400);
+      begin
+        MsgStateRM := GetShortMsg(2,5,ObjZav[im].Liter); MsgStateClr := 1;
+      end else
+      begin
+        MsgStateRM := GetShortMsg(2,5,' FR['+IntToStr(Obj)+ ']'); MsgStateClr := 1;
+      end;
+//      VytajkaOZM(Obj); // сбросить маневровый район, отправленный в сервер
     end;
     6 : begin // отказ включения управления
       WorkMode.CmdReady := false; // разблокировать прием команды от оператора
       MsgStateRM := GetShortMsg(2,Kvit,''); MsgStateClr := 1;
-      InsArcNewMsg(0,6+$400);
     end;
     7 : begin // сброс маршрутной команды по неудаче
       ResetMarhrutSrv(Obj); // установить признак сброса маршрута на сервере
@@ -1584,38 +1632,56 @@ try
       MsgStateRM := GetShortMsg(2,Kvit,' FR['+IntToStr(Obj)+ ']'); MsgStateClr := 1;
     end;
   end;
-except
-  on e: Exception do begin reportf('Ошибка '+ e.Message+ ' [KanalArmSrv.KvitancijaFromSrv]'); WindowsReBoot; end;
-end;
 end;
 
-
-//------------------------------------------------------------------------------
-// Сохранение данных на диск в НЕХ - формате
-procedure SaveDUMP(buf,fname : string);
-  var i,hfile, hnbw, len: cardinal; fp: longword;
-begin
-  DateTimeToString(stime, 'hh:nn:ss.zzz', Date+Time);
-  tbuf := '['+ stime+ '] ';
-  for i := 1 to Length(buf) do tbuf := tbuf + IntToHex(byte(buf[i]),2) + ' ';
-  tbuf := tbuf + #13#10;
-  len := Length(tbuf);
-  for i := 1 to len do buffarc[i] := byte(tbuf[i]);
-  hfile := CreateFile(PChar(fname), GENERIC_WRITE, 0, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-  if hfile <> INVALID_HANDLE_VALUE then
-  begin
-    fp := SetFilePointer(hfile, 0, nil, FILE_END);
-    if fp < $ffffffff then begin OLS.Offset := fp; WriteFile(hfile, buffarc[1], len, hnbw, nil); end;
-    CloseHandle(hfile);
-  end;
-end;
 
 //------------------------------------------------------------------------------
 // Технологическая функция - сохранение данных из каналов на диск
 procedure SaveKanal;
+  var i,hfile, hnbw, len: cardinal; fp: longword;
 begin
-  SaveDUMP(chnl1,'c:\kanal1.txt'); chnl1 := '';
-  SaveDUMP(chnl2,'c:\kanal2.txt'); chnl2 := '';
+  DateTimeToString(stime, 'hh:nn:ss.zzz', LastTime);
+  stime := #13#10+ '['+ stime+ ']'+ #13#10;
+
+  tbuf := '';
+  for i := 1 to Length(chnl1) do
+  begin
+    tbuf := tbuf + IntToHex(byte(chnl1[i]),2) + ' ';
+  end;
+  tbuf := stime + tbuf; len := Length(tbuf);
+  for i := 1 to len do buffarc[i] := byte(tbuf[i]);
+
+  hfile := CreateFile(PChar('c:\kanal1.txt'), GENERIC_WRITE, 0, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+  if hfile <> INVALID_HANDLE_VALUE then
+  begin
+    fp := SetFilePointer(hfile, 0, nil, FILE_END);
+    if fp < $ffffffff then
+    begin
+      OLS.Offset := fp; WriteFile(hfile, buffarc[1], len, hnbw, nil);
+    end;
+    CloseHandle(hfile);
+  end;
+  chnl1 := '';
+
+  tbuf := '';
+  for i := 1 to Length(chnl2) do
+  begin
+    tbuf := tbuf + IntToHex(byte(chnl2[i]),2) + ' ';
+  end;
+  tbuf := stime + tbuf; len := Length(tbuf);
+  for i := 1 to len do buffarc[i] := byte(tbuf[i]);
+
+  hfile := CreateFile(PChar('c:\kanal2.txt'), GENERIC_WRITE, 0, nil, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+  if hfile <> INVALID_HANDLE_VALUE then
+  begin
+    fp := SetFilePointer(hfile, 0, nil, FILE_END);
+    if fp < $ffffffff then
+    begin
+      OLS.Offset := fp; WriteFile(hfile, buffarc[1], len, hnbw, nil);
+    end;
+    CloseHandle(hfile);
+  end;
+  chnl2 := '';
 end;
 
 end.
